@@ -1,4 +1,4 @@
-import type{Account,CreditCard,Transaction,TransactionStatus,TransactionType}from"../types/entities";import{assertCents,assertNonNegativeCents}from"../money/cents";import{assertFinancialDate}from"../date/financial-date";
+import type{Account,CreditCard,Transaction,TransactionStatus}from"../types/entities";import{assertCents,assertNonNegativeCents}from"../money/cents";import{assertFinancialDate}from"../date/financial-date";
 export type FinancialData={accounts:readonly Account[];cards?:readonly CreditCard[];transactions:readonly Transaction[]};
 const real=(s:TransactionStatus)=>s==="PAID"||s==="RECEIVED";
 const hasAccount=(as:readonly Account[],id:string)=>as.some(a=>a.id===id);
@@ -9,4 +9,3 @@ function apply(tx:Transaction,id:string,b:number):number{if(tx.type==="INCOME"&&
 export function calculateAccountBalance(accountId:string,data:FinancialData):number{const a=data.accounts.find(x=>x.id===accountId);if(!a)throw new Error("Unknown accountId");validateAllTransactions(data);let b=a.openingBalanceCents;for(const tx of data.transactions)if(real(tx.status))b=apply(tx,accountId,b);assertCents(b,"accountBalance");return b}
 export function calculateProjectedAccountBalance(accountId:string,data:FinancialData):number{const a=data.accounts.find(x=>x.id===accountId);if(!a)throw new Error("Unknown accountId");validateAllTransactions(data);let b=a.openingBalanceCents;for(const tx of data.transactions)if(tx.status!=="CANCELLED")b=apply(tx,accountId,b);assertCents(b,"projectedAccountBalance");return b}
 export function calculateTotalRealBalance(data:FinancialData):number{return data.accounts.filter(a=>a.active).reduce((s,a)=>s+calculateAccountBalance(a.id,data),0)}
-export function transactionAffectsCashBalance(type:TransactionType):boolean{return type!=="EXPENSE"||type==="EXPENSE"}
