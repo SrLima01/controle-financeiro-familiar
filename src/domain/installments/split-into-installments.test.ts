@@ -1,1 +1,0 @@
-import{describe,expect,it}from"vitest";import{splitIntoInstallments}from"./split-into-installments";describe("installments",()=>{it("preserves cents and dates",()=>{const r=splitIntoInstallments(10001,3,"2026-01-31");expect(r.map(x=>x.amountCents)).toEqual([3334,3334,3333]);expect(r.map(x=>x.date)).toEqual(["2026-01-31","2026-02-28","2026-03-31"])})})

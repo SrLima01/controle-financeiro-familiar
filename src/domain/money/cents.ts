@@ -1,4 +1,0 @@
-export function assertCents(value:number,field="amountCents"):void{if(!Number.isSafeInteger(value))throw new Error(`${field} must be a safe integer number of cents`)}
-export function assertNonNegativeCents(value:number,field="amountCents"):void{assertCents(value,field);if(value<0)throw new Error(`${field} cannot be negative`)}
-export function sumCents(values:readonly number[]):number{const total=values.reduce((s,v)=>s+v,0);assertCents(total,"sum");return total}
-export function splitCents(totalCents:number,parts:number):number[]{assertNonNegativeCents(totalCents,"totalCents");if(!Number.isInteger(parts)||parts<=0)throw new Error("parts must be a positive integer");const base=Math.floor(totalCents/parts),remainder=totalCents%parts;return Array.from({length:parts},(_,i)=>base+(i<remainder?1:0))}

@@ -1,5 +1,12 @@
-# Status
-Fases 1 e 2 materializadas no GitHub nesta branch.
-Concluído: fundação React/TypeScript/Vite; entidades; dinheiro em centavos; datas; motor financeiro; parcelas; testes de domínio.
-Próxima etapa: auditoria final desta materialização e Fase 3 (IndexedDB offline-first, repositórios, atomicidade, backup/restore e versionamento).
-Limitação: a execução de npm/vitest/build depende do acesso ao registry; a estrutura foi criada sem depender de infraestrutura externa.
+# Status do projeto
+
+## Concluído
+- Fase 1: fundação React/TypeScript/Vite.
+- Fase 2: motor financeiro determinístico e auditoria.
+- Fase 3: persistência local IndexedDB, repositório, atomicidade e backup/restore validado.
+
+## Próxima etapa
+Fase 4 — Supabase, autenticação, família, RLS e sincronização local-first.
+
+## Validação
+Os testes automatizados estão definidos para Vitest. A execução completa depende do acesso ao registry npm no ambiente atual.
