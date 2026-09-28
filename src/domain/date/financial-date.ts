@@ -1,0 +1,3 @@
+const RE=/^\d{4}-\d{2}-\d{2}$/;
+export function assertFinancialDate(value:string):void{if(!RE.test(value))throw new Error("Date must use YYYY-MM-DD");const[y,m,d]=value.split("-").map(Number),dt=new Date(Date.UTC(y,m-1,d));if(dt.getUTCFullYear()!==y||dt.getUTCMonth()!==m-1||dt.getUTCDate()!==d)throw new Error("Invalid calendar date")}
+export function addMonths(value:string,months:number):string{assertFinancialDate(value);if(!Number.isInteger(months))throw new Error("months must be an integer");const[y,m,d]=value.split("-").map(Number),idx=y*12+(m-1)+months,yy=Math.floor(idx/12),mm=idx%12,last=new Date(Date.UTC(yy,mm+1,0)).getUTCDate(),dd=Math.min(d,last);return `${yy.toString().padStart(4,"0")}-${(mm+1).toString().padStart(2,"0")}-${dd.toString().padStart(2,"0")}`}

@@ -1,0 +1,1 @@
+import{describe,expect,it}from"vitest";import{splitCents}from"./cents";describe("cents",()=>{it("splits remainder deterministically",()=>expect(splitCents(10001,3)).toEqual([3334,3334,3333]))})
