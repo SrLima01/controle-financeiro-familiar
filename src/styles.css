@@ -17,3 +17,4 @@
 .file-capture{display:block;border:1px dashed var(--border,#ccd3df);border-radius:12px;padding:14px;font-weight:700}.file-capture input{display:block;margin-top:10px;width:100%}.ocr-text{white-space:pre-wrap;max-height:240px;overflow:auto;background:#f6f7f9;border-radius:10px;padding:12px;font:12px/1.45 monospace}.form-panel details{margin-top:14px}.form-panel summary{cursor:pointer;font-weight:700}
 
 .voice-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}.voice-actions .form-note{margin:0}
+\n.sync-conflict{margin:12px auto;width:min(900px,calc(100% - 32px));border-left:4px solid #b7791f}.sync-conflict p{margin:7px 0 12px;color:#697386;font-size:13px;line-height:1.45}.sync-conflict .form-actions{display:flex;gap:8px;flex-wrap:wrap}\n
