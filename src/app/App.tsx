@@ -75,7 +75,6 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
   const [code,setCode]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
-  const [remoteVersion,setRemoteVersion]=useState(0);
   useEffect(()=>{ listMyFamilies().then(setFamilies).catch(e=>setError(e instanceof Error?e.message:"Não foi possível carregar as famílias.")); },[]);
   async function create() {
     if (!name.trim()) return;
@@ -261,7 +260,7 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
  const [endDate,setEndDate]=useState("");
  const [amount,setAmount]=useState("");
  const [type,setType]=useState<"INCOME"|"EXPENSE">("EXPENSE");
- const [status,setStatus]=useState<TransactionStatus>("PLANNED");
+ const [status,setStatus]=useState<RecurringRule["status"]>("PLANNED");
  const [accountId,setAccountId]=useState("");
  const [creditCardId,setCreditCardId]=useState("");
  const [categoryId,setCategoryId]=useState("");
@@ -281,7 +280,7 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
      if(accountId&&creditCardId) throw new Error("Use conta ou cartão, não ambos.");
      if(editing){
        if(editing.transactionIds.length>0) throw new Error("Esta recorrência já possui lançamentos gerados. Para preservar o histórico, a alteração da série será feita em uma etapa própria.");
-       const replacement={...nextRule,id:editing.id,transactionIds:editing.transactionIds};
+       const replacement=createRecurringRule({description,frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined,active:editing.active});
        const next={...data,recurringRules:data.recurringRules.map(r=>r.id===editing.id?replacement:r)};
        setBusy(true);await onChange(next);reset();return;
      }
@@ -329,7 +328,7 @@ function Pots({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollec
  const real=useMemo(()=>calculateTotalRealBalance({accounts:data.accounts,cards:data.cards,transactions:data.transactions}),[data]);
  const reserved=getTotalReserved(data), free=getFreeCash(real,data);
  const active=data.pots.filter(p=>p.active);
- function reset(){setEditing(null);setName("");setTarget("");setAmount("");setMovementType("DEPOSIT");setDescription("");setError("")}
+ function reset(){setName("");setTarget("");setAmount("");setMovementType("DEPOSIT");setDescription("");setError("")}
  async function savePot(){
    setError("");try{const targetCents=parseAmount(target);const pot=createPot(name,targetCents);setBusy(true);await onChange({...data,pots:[...data.pots,pot]});reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível criar a caixinha.")}finally{setBusy(false)}
  }
