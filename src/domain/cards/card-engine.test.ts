@@ -176,3 +176,66 @@ describe("card engine", () => {
     expect(getCardInvoice(card, tx, "2026-10-10").openAmountCents).toBe(0);
   });
 });
+
+
+describe("card payment allocation", () => {
+  const card = {
+    id: "card-1",
+    name: "Cartão",
+    accountId: "account-1",
+    creditLimitCents: 100000,
+    closingDay: 10,
+    dueDay: 20,
+    active: true,
+  } as const;
+
+  const tx = (id: string, date: string, type: "EXPENSE" | "CARD_PAYMENT", amountCents: number, status: "PAID" | "PLANNED" = "PAID") => ({
+    id,
+    date,
+    type,
+    status,
+    amountCents,
+    description: id,
+    creditCardId: card.id,
+  } as const);
+
+  it("allocates a late payment to the oldest open invoice", () => {
+    const transactions = [
+      tx("purchase-1", "2026-08-05", "EXPENSE", 3000),
+      tx("purchase-2", "2026-09-05", "EXPENSE", 5000),
+      tx("payment-1", "2026-09-25", "CARD_PAYMENT", 4000),
+    ];
+    expect(getCardInvoice(card, transactions, "2026-08-10")).toMatchObject({
+      purchaseTotalCents: 3000,
+      paymentTotalCents: 3000,
+      openAmountCents: 0,
+    });
+    expect(getCardInvoice(card, transactions, "2026-09-10")).toMatchObject({
+      purchaseTotalCents: 5000,
+      paymentTotalCents: 1000,
+      openAmountCents: 4000,
+    });
+    expect(calculateCardOutstanding(card, transactions)).toBe(4000);
+  });
+
+  it("does not use an advance payment to reduce a future invoice", () => {
+    const transactions = [
+      tx("purchase-1", "2026-09-15", "EXPENSE", 5000),
+      tx("payment-1", "2026-09-05", "CARD_PAYMENT", 5000),
+    ];
+    expect(getCardInvoice(card, transactions, "2026-09-10")).toMatchObject({
+      purchaseTotalCents: 0,
+      paymentTotalCents: 0,
+      openAmountCents: 0,
+    });
+    expect(calculateCardOutstanding(card, transactions)).toBe(5000);
+  });
+
+  it("ignores planned purchases and payments that are not realized", () => {
+    const transactions = [
+      tx("purchase-1", "2026-09-05", "EXPENSE", 5000, "PLANNED"),
+      tx("payment-1", "2026-09-15", "CARD_PAYMENT", 5000, "PLANNED"),
+    ];
+    expect(calculateCardOutstanding(card, transactions)).toBe(0);
+  });
+});
