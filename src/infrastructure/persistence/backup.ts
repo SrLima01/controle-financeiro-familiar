@@ -175,7 +175,7 @@ export function validateBackup(input: unknown): FinanceBackup {
   const budgetCategoryIds = new Set(data.categories.map(c => c.id));
   for (const budget of data.budgets as Budget[]) {
     if (
-      typeof budget.month !== "string" || !/^\\d{4}-\\d{2}$/.test(budget.month) ||
+      typeof budget.month !== "string" || !/^\d{4}-\d{2}$/.test(budget.month) ||
       !budgetCategoryIds.has(budget.categoryId) ||
       !Number.isSafeInteger(budget.limitCents) || budget.limitCents < 0 ||
       typeof budget.active !== "boolean"
