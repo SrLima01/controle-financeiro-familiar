@@ -8,6 +8,6 @@ const data={people:[],categories:[],accounts:[],cards:[],transactions:[
 {id:"4",date:"2026-09-22",type:"EXPENSE",status:"CANCELLED",amountCents:50000,description:"Cancelada",categoryId:"c"}
 ],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[budget]};
 describe("budget engine",()=>{
- it("counts expense by purchase month including card/pending and excluding cancelled",()=>expect(getBudgetSpent(data,budget)).toBe(85000));
+ it("counts only realized expenses by purchase month and excludes cancelled",()=>expect(getBudgetSpent(data,budget)).toBe(70000));
  it("uses 80 and 100 thresholds",()=>{expect(getBudgetStatus(80000,100000)).toBe("ATTENTION");expect(getBudgetStatus(100001,100000)).toBe("EXCEEDED")});
 });
