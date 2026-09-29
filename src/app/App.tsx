@@ -13,10 +13,11 @@ import { assertCents } from "../domain/money/cents";
 import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
 import { createRecurringRule, deactivateRecurringRule, generateRecurringTransactions } from "../domain/recurring/recurring-engine";
 import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
-import type { Pot, RecurringFrequency, RecurringRule } from "../domain/types/entities";
+import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
+import type { Budget, Pot, RecurringFrequency, RecurringRule } from "../domain/types/entities";
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais";
-const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [] };
+const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [], budgets: [] };
 const repo = new IndexedDbFinanceRepository();
 
 function money(cents:number) {
@@ -338,9 +339,37 @@ function Pots({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollec
  </div>;
 }
 
+function Budgets({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+ const [editing,setEditing]=useState<Budget|null>(null);
+ const [month,setMonth]=useState(()=>todayFinancialDate().slice(0,7));
+ const [categoryId,setCategoryId]=useState(""); const [limit,setLimit]=useState("");
+ const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+ const categories=data.categories.filter(c=>c.active&&c.kind==="EXPENSE");
+ const budgets=data.budgets.filter(b=>b.active);
+ function reset(){setEditing(null);setMonth(todayFinancialDate().slice(0,7));setCategoryId("");setLimit("");setError("")}
+ function edit(b:Budget){setEditing(b);setMonth(b.month);setCategoryId(b.categoryId);setLimit((b.limitCents/100).toFixed(2).replace(".",","));setError("")}
+ async function save(){
+   setError("");try{
+     const cents=parseAmount(limit); if(!categoryId)throw new Error("Selecione uma categoria.");
+     const duplicate=data.budgets.find(b=>b.active&&b.month===month&&b.categoryId===categoryId&&b.id!==editing?.id);
+     if(duplicate)throw new Error("Já existe um orçamento ativo para esta categoria neste mês.");
+     const budget=editing?{...editing,month,categoryId,limitCents:cents,active:true}:createBudget(month,categoryId,cents);
+     const next={...data,budgets:editing?data.budgets.map(b=>b.id===budget.id?budget:b):[...data.budgets,budget]};
+     setBusy(true);await onChange(next);reset();
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar o orçamento.")}finally{setBusy(false)}
+ }
+ async function archive(b:Budget){if(!confirm("Arquivar este orçamento? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,budgets:data.budgets.map(x=>x.id===b.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
+ return <div className="page-content">
+  <div className="page-heading"><div><span className="eyebrow">Planejamento</span><h1>Orçamentos</h1></div><button className="primary compact" onClick={reset}>+ Novo orçamento</button></div>
+  {error&&<div className="global-alert">{error}</div>}
+  <section className="panel budget-list">{budgets.length===0?<Empty text="Nenhum orçamento cadastrado."/>:budgets.sort((a,b)=>b.month.localeCompare(a.month)).map(b=>{const cat=data.categories.find(c=>c.id===b.categoryId);const spent=getBudgetSpent(data,b);const pct=getBudgetStatus(spent,b.limitCents);const percent=b.limitCents===0?(spent>0?100:0):Math.min(100,spent/b.limitCents*100);return <article className="budget-card" key={b.id}><div className="budget-head"><div><strong>{cat?.name??"Categoria removida"}</strong><span>{b.month}</span></div><strong>{money(spent)} / {money(b.limitCents)}</strong></div><div className="budget-progress"><div className={pct.toLowerCase()} style={{width:`${percent}%`}}/></div><div className="budget-meta"><span>{pct==="NORMAL"?"Dentro do orçamento":pct==="ATTENTION"?"Atenção: 80% ou mais":"Orçamento excedido"}</span><span>{b.limitCents>0?Math.round(spent/b.limitCents*100):spent>0?"∞":0}%</span></div><div className="row-actions"><button className="link-button" onClick={()=>edit(b)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(b)}>Arquivar</button></div></article>})}</section>
+  <section className="panel form-panel"><h2>{editing?"Editar orçamento":"Novo orçamento"}</h2><div className="form-grid"><label>Mês<input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><label>Categoria<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Selecione</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>Limite mensal<input inputMode="decimal" value={limit} onChange={e=>setLimit(e.target.value)} placeholder="0,00"/></label></div><div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Criar orçamento"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div><p className="form-note">O gasto é apurado pela data da compra. Compras no cartão entram no mês da compra, e lançamentos cancelados não entram no realizado.</p></section>
+ </div>;
+}
+
 function More({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
- const [section,setSection]=useState<"pots"|"recurring">("pots");
- return <>{<div className="subnav"><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button></div>}{section==="pots"?<Pots data={data} onChange={onChange}/>:<Recurring data={data} onChange={onChange}/>}</>;
+ const [section,setSection]=useState<"pots"|"recurring"|"budgets">("pots");
+ return <>{<div className="subnav"><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button></div>}{section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:<Budgets data={data} onChange={onChange}/>}</>;
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
@@ -365,7 +394,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     let cancelled=false;
     (async()=>{
       try {
-        const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules"),pots:await repo.list("pots"),potMovements:await repo.list("potMovements")};
+        const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules"),pots:await repo.list("pots"),potMovements:await repo.list("potMovements"),budgets:await repo.list("budgets")};
         if(!cancelled)setData(local);
         const remote=await pullFinanceState(family.id);
         if(remote && !cancelled){ await repo.replaceAll(remote.state); setData(remote.state); setRemoteVersion(remote.version); }
