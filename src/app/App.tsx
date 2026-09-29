@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { archivePerson, createPerson, updatePerson } from "../domain/people/person-engine";
 import type { User } from "@supabase/supabase-js";
 import type { EntityCollection } from "../infrastructure/persistence/repository";
+import type { Person } from "../domain/types/entities";
 import { IndexedDbFinanceRepository } from "../infrastructure/persistence/indexeddb";
 import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateTransaction } from "../domain/transactions/financial-engine";
 import { calculateCardAvailableLimit, calculateCardOutstanding, getCardInvoice, validateCreditCard } from "../domain/cards/card-engine";
@@ -552,9 +554,56 @@ function ReceiptScanner({data,onChange}:{data:EntityCollection;onChange:(next:En
  </div>;
 }
 
+function People({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+ const [editing,setEditing]=useState<Person|null>(null);
+ const [name,setName]=useState("");
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
+
+ function reset(){setEditing(null);setName("");setError("")}
+ function edit(person:Person){setEditing(person);setName(person.name);setError("")}
+
+ async function save(){
+   setError("");
+   try{
+     const person=editing?updatePerson(editing,name,data):createPerson(name,data);
+     setBusy(true);
+     await onChange({...data,people:editing?data.people.map(p=>p.id===person.id?person:p):[...data.people,person]});
+     reset();
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a pessoa.");}
+   finally{setBusy(false);}
+ }
+
+ async function archive(person:Person){
+   if(!confirm("Arquivar esta pessoa? O histórico de lançamentos será preservado."))return;
+   setBusy(true);setError("");
+   try{await onChange({...data,people:data.people.map(p=>p.id===person.id?archivePerson(p):p)});}
+   catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar a pessoa.");}
+   finally{setBusy(false);}
+ }
+
+ const active=data.people.filter(p=>p.active);
+ return <div className="page-content">
+   <div className="page-heading"><div><span className="eyebrow">Família</span><h1>Pessoas</h1></div><button className="primary compact" onClick={reset}>+ Nova pessoa</button></div>
+   {error&&<div className="global-alert">{error}</div>}
+   <section className="panel">
+     {active.length===0?<Empty text="Nenhuma pessoa cadastrada."/>:active.map(person=><div className="transaction-row" key={person.id}>
+       <div><strong>{person.name}</strong><span>Ativa · usada para atribuir lançamentos e relatórios</span></div>
+       <div className="row-actions"><button className="link-button" onClick={()=>edit(person)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(person)}>Arquivar</button></div>
+     </div>)}
+   </section>
+   <section className="panel form-panel">
+     <h2>{editing?"Editar pessoa":"Nova pessoa"}</h2>
+     <label>Nome<input value={name} maxLength={80} onChange={e=>setName(e.target.value)} placeholder="Ex.: João"/></label>
+     <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Adicionar pessoa"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div>
+     <p className="form-note">Arquivar remove a pessoa dos novos lançamentos, mas preserva a atribuição dos lançamentos históricos.</p>
+   </section>
+ </div>;
+}
+
 function More({data,onChange,onSignOut}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
- const [section,setSection]=useState<"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"settings">("smart");
- return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="receipt"?"active":""} onClick={()=>setSection("receipt")}>Ler recibo</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
+ const [section,setSection]=useState<"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"settings">("smart");
+ return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="receipt"?"active":""} onClick={()=>setSection("receipt")}>Ler recibo</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="people"?"active":""} onClick={()=>setSection("people")}>Pessoas</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:section==="people"?<People data={data} onChange={onChange}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
