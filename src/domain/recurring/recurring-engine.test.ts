@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRecurringRule, generateRecurringTransactions, nextRecurringDate } from "./recurring-engine";
+import type { EntityCollection } from "../../infrastructure/persistence/repository";
 
 const accounts=[{id:"a",name:"Conta",type:"CHECKING" as const,openingBalanceCents:0,active:true}];
 const base={description:"Aluguel",frequency:"MONTHLY" as const,startDate:"2026-01-31",amountCents:100000,type:"EXPENSE" as const,status:"PLANNED" as const,accountId:"a",active:true};
@@ -11,7 +12,7 @@ describe("recurring engine",()=>{
  });
  it("creates a rule and generates only missing occurrences",()=>{
    const rule=createRecurringRule(base);
-   const data={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule]};
+   const data: EntityCollection = { people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule]};
    const first=generateRecurringTransactions(data,rule,"2026-03-31");
    expect(first.generated).toHaveLength(3);
    const second=generateRecurringTransactions(first.data,first.data.recurringRules[0],"2026-05-31");
