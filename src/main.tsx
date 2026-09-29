@@ -1,1 +1,8 @@
-import {StrictMode} from "react"; import {createRoot} from "react-dom/client"; import "./styles.css"; function App(){return <main className="app"><section className="card"><h1>Controle Financeiro Familiar</h1><p>Base técnica do aplicativo. O motor financeiro é determinístico e independente da interface.</p></section></main>} createRoot(document.getElementById("root")!).render(<StrictMode><App/></StrictMode>);
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./styles.css";
+import App from "./app/App";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode><App /></StrictMode>
+);
