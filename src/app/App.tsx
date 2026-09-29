@@ -271,6 +271,7 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
      if(accountId&&creditCardId) throw new Error("Use conta ou cartão, não ambos.");
      const nextRule=createRecurringRule({description,frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined,active:true});
      if(editing){
+       if(editing.transactionIds.length>0) throw new Error("Esta recorrência já possui lançamentos gerados. Para preservar o histórico, a alteração da série será feita em uma etapa própria.");
        const replacement={...nextRule,id:editing.id,transactionIds:editing.transactionIds};
        const next={...data,recurringRules:data.recurringRules.map(r=>r.id===editing.id?replacement:r)};
        setBusy(true);await onChange(next);reset();return;
