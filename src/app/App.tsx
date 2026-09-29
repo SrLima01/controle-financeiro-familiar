@@ -11,9 +11,11 @@ import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator"
 import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
 import { assertCents } from "../domain/money/cents";
 import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
+import { createRecurringRule, deactivateRecurringRule, generateRecurringTransactions } from "../domain/recurring/recurring-engine";
+import type { RecurringFrequency, RecurringRule } from "../domain/types/entities";
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais";
-const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [] };
+const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [] };
 const repo = new IndexedDbFinanceRepository();
 
 function money(cents:number) {
@@ -241,6 +243,76 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  </div>;
 }
 
+function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+ const [editing,setEditing]=useState<RecurringRule|null>(null);
+ const [description,setDescription]=useState("");
+ const [frequency,setFrequency]=useState<RecurringFrequency>("MONTHLY");
+ const [startDate,setStartDate]=useState(()=>todayFinancialDate());
+ const [endDate,setEndDate]=useState("");
+ const [amount,setAmount]=useState("");
+ const [type,setType]=useState<"INCOME"|"EXPENSE">("EXPENSE");
+ const [status,setStatus]=useState<TransactionStatus>("PLANNED");
+ const [accountId,setAccountId]=useState("");
+ const [creditCardId,setCreditCardId]=useState("");
+ const [categoryId,setCategoryId]=useState("");
+ const [personId,setPersonId]=useState("");
+ const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+ const activeAccounts=data.accounts.filter(a=>a.active),activeCards=data.cards.filter(c=>c.active),activePeople=data.people.filter(p=>p.active);
+ const activeCategories=data.categories.filter(c=>c.active&&c.kind===type);
+ function reset(){setEditing(null);setDescription("");setFrequency("MONTHLY");setStartDate(todayFinancialDate());setEndDate("");setAmount("");setType("EXPENSE");setStatus("PLANNED");setAccountId("");setCreditCardId("");setCategoryId("");setPersonId("");setError("")}
+ function edit(rule:RecurringRule){
+   setEditing(rule);setDescription(rule.description);setFrequency(rule.frequency);setStartDate(rule.startDate);setEndDate(rule.endDate??"");setAmount((rule.amountCents/100).toFixed(2).replace(".",","));setType(rule.type);setStatus(rule.status);setAccountId(rule.accountId??"");setCreditCardId(rule.creditCardId??"");setCategoryId(rule.categoryId??"");setPersonId(rule.personId??"");setError("");
+ }
+ async function save(){
+   setError("");
+   try{
+     const cents=parseAmount(amount);
+     if(type==="EXPENSE"&&!accountId&&!creditCardId) throw new Error("Despesa recorrente precisa de conta ou cartão.");
+     if(accountId&&creditCardId) throw new Error("Use conta ou cartão, não ambos.");
+     const nextRule=createRecurringRule({description,frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined,active:true});
+     if(editing){
+       const replacement={...nextRule,id:editing.id,transactionIds:editing.transactionIds};
+       const next={...data,recurringRules:data.recurringRules.map(r=>r.id===editing.id?replacement:r)};
+       setBusy(true);await onChange(next);reset();return;
+     }
+     const created=createRecurringRule({description,frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined,active:true});
+     const horizon=new Date(); horizon.setMonth(horizon.getMonth()+12);
+     const horizonDate=`${horizon.getFullYear()}-${String(horizon.getMonth()+1).padStart(2,"0")}-${String(horizon.getDate()).padStart(2,"0")}`;
+     const generated=generateRecurringTransactions({...data,recurringRules:[...data.recurringRules,created]},created,horizonDate);
+     setBusy(true);await onChange(generated.data);reset();
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a recorrência.");}finally{setBusy(false)}
+ }
+ async function generate(rule:RecurringRule){
+   setBusy(true);setError("");
+   try{const horizon=new Date();horizon.setMonth(horizon.getMonth()+12);const through=`${horizon.getFullYear()}-${String(horizon.getMonth()+1).padStart(2,"0")}-${String(horizon.getDate()).padStart(2,"0")}`;const result=generateRecurringTransactions(data,rule,through);await onChange(result.data)}catch(e){setError(e instanceof Error?e.message:"Não foi possível gerar os lançamentos.");}finally{setBusy(false)}
+ }
+ async function deactivate(rule:RecurringRule){
+   if(!confirm("Desativar esta recorrência? Os lançamentos já gerados serão preservados."))return;
+   setBusy(true);setError("");
+   try{await onChange(deactivateRecurringRule(data,rule.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível desativar.")}finally{setBusy(false)}
+ }
+ const frequencyLabel=(f:RecurringFrequency)=>({WEEKLY:"Semanal",BIWEEKLY:"Quinzenal",MONTHLY:"Mensal",BIMONTHLY:"Bimestral",QUARTERLY:"Trimestral",SEMIANNUAL:"Semestral",ANNUAL:"Anual"}[f]);
+ return <div className="page-content">
+   <div className="page-heading"><div><span className="eyebrow">Automação</span><h1>Recorrências</h1></div><button className="primary compact" onClick={reset}>+ Nova recorrência</button></div>
+   {error&&<div className="global-alert">{error}</div>}
+   <section className="panel transaction-list">{data.recurringRules.filter(r=>r.active).length===0?<Empty text="Nenhuma recorrência ativa."/>:data.recurringRules.filter(r=>r.active).map(r=><div className="transaction-row" key={r.id}><div><strong>{r.description}</strong><span>{frequencyLabel(r.frequency)} · desde {r.startDate} · {money(r.amountCents)} · {r.transactionIds.length} lançamentos gerados</span></div><div className="row-actions"><button className="link-button" onClick={()=>edit(r)}>Editar regra</button><button className="link-button" disabled={busy} onClick={()=>void generate(r)}>Gerar próximos</button><button className="link-button danger" disabled={busy} onClick={()=>void deactivate(r)}>Desativar</button></div></div>)}</section>
+   <section className="panel form-panel"><h2>{editing?"Editar recorrência":"Nova recorrência"}</h2><div className="form-grid">
+    <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as "INCOME"|"EXPENSE";setType(v);setCategoryId("");if(v==="INCOME")setCreditCardId("")}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option></select></label>
+    <label>Frequência<select value={frequency} onChange={e=>setFrequency(e.target.value as RecurringFrequency)}><option value="WEEKLY">Semanal</option><option value="BIWEEKLY">Quinzenal</option><option value="MONTHLY">Mensal</option><option value="BIMONTHLY">Bimestral</option><option value="QUARTERLY">Trimestral</option><option value="SEMIANNUAL">Semestral</option><option value="ANNUAL">Anual</option></select></label>
+    <label>Data inicial<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
+    <label>Data final (opcional)<input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}/></label>
+    <label>Valor<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00"/></label>
+    <label>Status<select value={status} onChange={e=>setStatus(e.target.value as TransactionStatus)}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
+    <label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: Aluguel"/></label>
+    {activeCategories.length>0&&<label>Categoria<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Nenhuma</option>{activeCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+    <label>Conta<select value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCreditCardId("")}}><option value="">Nenhuma</option>{activeAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+    {type==="EXPENSE"&&<label>Cartão<select value={creditCardId} onChange={e=>{setCreditCardId(e.target.value);if(e.target.value)setAccountId("")}}><option value="">Nenhum</option>{activeCards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+    <label>Pessoa (opcional)<select value={personId} onChange={e=>setPersonId(e.target.value)}><option value="">Nenhuma</option>{activePeople.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+   </div><p className="form-note">Ao criar uma recorrência, o sistema gera os próximos 12 meses de lançamentos. Novos lançamentos não são duplicados ao usar “Gerar próximos”.</p>
+   <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar regra":"Criar recorrência"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div></section>
+ </div>;
+}
+
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
  const [editing,setEditing]=useState<CreditCard|null>(null),[name,setName]=useState(""),[accountId,setAccountId]=useState(""),[limit,setLimit]=useState(""),[closingDay,setClosingDay]=useState("10"),[dueDay,setDueDay]=useState("20"),[busy,setBusy]=useState(false),[error,setError]=useState("");
  const accounts=data.accounts.filter(a=>a.active);
@@ -263,7 +335,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     let cancelled=false;
     (async()=>{
       try {
-        const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups")};
+        const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules")};
         if(!cancelled)setData(local);
         const remote=await pullFinanceState(family.id);
         if(remote && !cancelled){ await repo.replaceAll(remote.state); setData(remote.state); setRemoteVersion(remote.version); }
@@ -282,6 +354,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
+    page==="mais" ? <Recurring data={data} onChange={persist}/> :
     <Placeholder title="Mais" text="Parcelamentos, recorrências, caixinhas, orçamentos, relatórios e assistente serão adicionados por etapas."/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></header>
