@@ -28,6 +28,27 @@ describe("card engine", () => {
     expect(() => validateCreditCardUpdate(card, { ...card, accountId: "a2" }, ["a2"], history)).toThrow("conta");
     expect(() => validateCreditCardUpdate(card, { ...card, name: "Visa novo", creditLimitCents: 120000 }, ["a1"], history)).not.toThrow();
   });
+  it("handles closing day 31 across short months and leap years", () => {
+    expect(invoiceClosingDate("2026-02-01", 31)).toBe("2026-02-28");
+    expect(invoiceClosingDate("2026-02-28", 31)).toBe("2026-02-28");
+    expect(invoiceClosingDate("2026-03-01", 31)).toBe("2026-03-31");
+    expect(invoiceClosingDate("2028-02-01", 31)).toBe("2028-02-29");
+    expect(invoiceClosingDate("2028-02-29", 31)).toBe("2028-02-29");
+    expect(invoiceClosingDate("2028-03-01", 31)).toBe("2028-03-31");
+  });
+
+  it("clamps due day 31 to February and keeps the due month rule deterministic", () => {
+    expect(invoiceDueDateFromClosing("2026-02-28", 10, 31)).toBe("2026-02-28");
+    expect(invoiceDueDateFromClosing("2028-02-29", 10, 31)).toBe("2028-02-29");
+    expect(invoiceDueDateFromClosing("2026-03-31", 31, 31)).toBe("2026-04-30");
+    expect(invoiceDueDateFromClosing("2026-03-31", 10, 31)).toBe("2026-03-31");
+  });
+
+  it("includes the exact closing date and moves the next day to the next invoice", () => {
+    expect(invoiceClosingDate("2026-09-10", 10)).toBe("2026-09-10");
+    expect(invoiceClosingDate("2026-09-11", 10)).toBe("2026-10-10");
+  });
+
   it("places purchases on the correct closing cycle", () => {
     expect(invoiceClosingDate("2026-09-10", 10)).toBe("2026-09-10");
     expect(invoiceClosingDate("2026-09-11", 10)).toBe("2026-10-10");
