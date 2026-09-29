@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateCardAvailableLimit,
-  calculateCardOutstanding,
+  calculateCardOutstanding,\n  validateCreditCardUpdate,
   getCardInvoice,
   invoiceClosingDate,
   invoiceDueDateFromClosing,
@@ -18,7 +18,7 @@ const card: CreditCard = {
   active: true,
 };
 
-describe("card engine", () => {
+describe("card engine", () => {\n  it("locks invoice structure after card history exists", () => {\n    const changed = { ...card, closingDay: 11 };\n    const history: Transaction[] = [{ id: "1", date: "2026-09-11", type: "EXPENSE", status: "PAID", amountCents: 1000, description: "Compra", creditCardId: "c1" }];\n    expect(() => validateCreditCardUpdate(card, changed, ["a1"], history)).toThrow("fechamento");\n    expect(() => validateCreditCardUpdate(card, { ...card, dueDay: 21 }, ["a1"], history)).toThrow("vencimento");\n    expect(() => validateCreditCardUpdate(card, { ...card, accountId: "a2" }, ["a2"], history)).toThrow("conta");\n    expect(() => validateCreditCardUpdate(card, { ...card, name: "Visa novo", creditLimitCents: 120000 }, ["a1"], history)).not.toThrow();\n  });
   it("places purchases on the correct closing cycle", () => {
     expect(invoiceClosingDate("2026-09-10", 10)).toBe("2026-09-10");
     expect(invoiceClosingDate("2026-09-11", 10)).toBe("2026-10-10");
