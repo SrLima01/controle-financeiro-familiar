@@ -12,7 +12,7 @@ describe("recurring engine",()=>{
  });
  it("creates a rule and generates only missing occurrences",()=>{
    const rule=createRecurringRule(base);
-   const data: EntityCollection = { people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule]};
+   const data: EntityCollection = { people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
    const first=generateRecurringTransactions(data,rule,"2026-03-31");
    expect(first.generated).toHaveLength(3);
    const second=generateRecurringTransactions(first.data,first.data.recurringRules[0],"2026-05-31");
@@ -21,7 +21,7 @@ describe("recurring engine",()=>{
  });
  it("does not generate beyond end date",()=>{
    const rule=createRecurringRule({...base,endDate:"2026-02-28"});
-   const data={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule]};
+   const data={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
    expect(generateRecurringTransactions(data,rule,"2026-12-31").generated).toHaveLength(2);
  });
 });
