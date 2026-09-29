@@ -16,6 +16,7 @@ import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, g
 import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
 import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
 import type { Budget, Pot, RecurringFrequency, RecurringRule } from "../domain/types/entities";
+import { exportJson, exportTransactionsCsv, importJson } from "../infrastructure/persistence/export";
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais" | "relatorios";
 const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [], budgets: [] };
@@ -381,9 +382,32 @@ function Reports({data}:{data:EntityCollection}) {
  </div>;
 }
 
-function More({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
- const [section,setSection]=useState<"pots"|"recurring"|"budgets">("pots");
- return <>{<div className="subnav"><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button></div>}{section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:<Budgets data={data} onChange={onChange}/>}</>;
+function Settings({data,onChange,onSignOut}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
+ const [error,setError]=useState(""); const [busy,setBusy]=useState(false);
+ async function importFile(file:File){
+  setError("");setBusy(true);
+  try{
+   const next=importJson(await file.text());
+   if(!confirm("Importar este backup substituirá os dados locais atuais. Deseja continuar?"))return;
+   await onChange(next); alert("Backup importado com sucesso.");
+  }catch(e){setError(e instanceof Error?e.message:"Backup inválido.");}
+  finally{setBusy(false);}
+ }
+ return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Aplicativo</span><h1>Configurações</h1></div></div>
+ {error&&<div className="global-alert">{error}</div>}
+ <section className="panel settings-list">
+  <div><strong>Backup completo</strong><p>Exporta todas as entidades financeiras em JSON.</p><button className="primary compact" onClick={()=>exportJson(data)}>Exportar JSON</button></div>
+  <div><strong>Exportar lançamentos</strong><p>Gera CSV para Excel ou LibreOffice.</p><button className="secondary compact" onClick={()=>exportTransactionsCsv(data)}>Exportar CSV</button></div>
+  <div><strong>Importar backup</strong><p>O arquivo é validado antes de substituir os dados locais.</p><input type="file" accept="application/json,.json" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.currentTarget.value=""}}/></div>
+  <div><strong>Sessão</strong><p>Encerrar a sessão neste aparelho.</p><button className="secondary compact" onClick={()=>void onSignOut()}>Sair da conta</button></div>
+ </section>
+ <section className="panel"><h2>Integridade</h2><p className="form-note">O backup mantém versão de esquema e valida relações entre entidades antes da importação.</p></section>
+ </div>;
+}
+
+function More({data,onChange,onSignOut}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
+ const [section,setSection]=useState<"pots"|"recurring"|"budgets"|"settings">("pots");
+ return <>{<div className="subnav"><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
@@ -427,7 +451,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
-    page==="mais" ? <More data={data} onChange={persist}/> : page==="relatorios" ? <Reports data={data}/> :
+    page==="mais" ? <More data={data} onChange={persist} onSignOut={onSignOut}/> : page==="relatorios" ? <Reports data={data}/> :
     <Placeholder title="Mais" text="Parcelamentos, recorrências, caixinhas, orçamentos, relatórios e assistente serão adicionados por etapas."/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></header>
