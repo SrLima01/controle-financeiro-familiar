@@ -30,6 +30,13 @@ function daysInMonth(y: number, m: number) {
   return new Date(y, m, 0).getDate();
 }
 
+function previousMonthDate(date: string, day: number): string {
+  const { y, m } = dateParts(date);
+  const previousM = m === 1 ? 12 : m - 1;
+  const previousY = m === 1 ? y - 1 : y;
+  return iso(previousY, previousM, day);
+}
+
 function iso(y: number, m: number, d: number) {
   const mm = String(m).padStart(2, "0");
   const dd = String(Math.min(d, daysInMonth(y, m))).padStart(2, "0");
