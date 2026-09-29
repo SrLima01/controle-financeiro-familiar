@@ -1,5 +1,5 @@
 import type { EntityCollection, EntityMap } from "./repository";
-import type { Account, CreditCard, RecurringRule, Transaction } from "../../domain/types/entities";
+import type { Account, CreditCard, Pot, PotMovement, RecurringRule, Transaction } from "../../domain/types/entities";
 import { validateAllTransactions } from "../../domain/transactions/financial-engine";
 
 export const BACKUP_SCHEMA_VERSION = 1;
@@ -18,7 +18,9 @@ const COLLECTIONS: (keyof EntityMap)[] = [
   "cards",
   "transactions",
   "installmentGroups",
-  "recurringRules"
+  "recurringRules",
+  "pots",
+  "potMovements"
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -49,6 +51,8 @@ export function validateBackup(input: unknown): FinanceBackup {
   if (!isRecord(input.data)) throw new Error("Backup data is required");
   // Backward compatibility: states created before Fase 10 do not have this collection.
   if (!("recurringRules" in input.data)) input.data.recurringRules = [];
+  if (!("pots" in input.data)) input.data.pots = [];
+  if (!("potMovements" in input.data)) input.data.potMovements = [];
 
   for (const collection of COLLECTIONS) {
     assertArray(input.data[collection], collection);
@@ -148,6 +152,24 @@ export function validateBackup(input: unknown): FinanceBackup {
     if (rule.personId && !personIds.has(rule.personId)) throw new Error("Recurring rule references an unknown person");
   }
 
+  for (const pot of data.pots as Pot[]) {
+    if (typeof pot.name !== "string" || !Number.isSafeInteger(pot.targetCents) || pot.targetCents < 0 || typeof pot.active !== "boolean") {
+      throw new Error("Invalid pot " + pot.id);
+    }
+  }
+
+  const potIds = new Set(data.pots.map(p => p.id));
+  for (const movement of data.potMovements as PotMovement[]) {
+    if (
+      !potIds.has(movement.potId) ||
+      !["DEPOSIT", "WITHDRAWAL"].includes(movement.type) ||
+      !Number.isSafeInteger(movement.amountCents) ||
+      movement.amountCents <= 0 ||
+      typeof movement.date !== "string" ||
+      typeof movement.description !== "string"
+    ) throw new Error("Invalid pot movement " + movement.id);
+  }
+
   for (const tx of data.transactions as Transaction[]) {
     if (
       typeof tx.description !== "string" ||
@@ -236,6 +258,8 @@ export function emptyEntityCollection(): EntityCollection {
     cards: [],
     transactions: [],
     installmentGroups: [],
-    recurringRules: []
+    recurringRules: [],
+    pots: [],
+    potMovements: []
   };
 }
