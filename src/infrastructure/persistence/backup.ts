@@ -164,7 +164,7 @@ export function validateBackup(input: unknown): FinanceBackup {
     }
   }
 
-  return data;
+  return input as FinanceBackup;
 }
 
 export function serializeBackup(data: EntityCollection, appVersion = "0.1.0"): string {
