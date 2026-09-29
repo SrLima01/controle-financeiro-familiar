@@ -1,9 +1,9 @@
-import type { Account, Category, CreditCard, InstallmentGroup, Person, Pot, PotMovement, RecurringRule, Transaction } from "../../domain/types/entities";
+import type { Account, Category, CreditCard, InstallmentGroup, Person, Pot, PotMovement, RecurringRule, Transaction, Budget } from "../../domain/types/entities";
 import type { EntityCollection, EntityMap, FinanceRepository, StoredEntity } from "./repository";
 
 const DB_NAME = "controle-financeiro-familiar";
-const DB_VERSION = 3;
-const STORES = ["people", "categories", "accounts", "cards", "transactions", "installmentGroups", "recurringRules", "pots", "potMovements"] as const;
+const DB_VERSION = 4;
+const STORES = ["people", "categories", "accounts", "cards", "transactions", "installmentGroups", "recurringRules", "pots", "potMovements", "budgets"] as const;
 type StoreName = typeof STORES[number];
 
 function now(): string {
@@ -177,4 +177,4 @@ export class IndexedDbFinanceRepository implements FinanceRepository {
 }
 
 export const entityCollections: StoreName[] = [...STORES];
-export type DomainEntity = Person | Category | Account | CreditCard | Transaction | InstallmentGroup | RecurringRule | Pot | PotMovement;
+export type DomainEntity = Person | Category | Account | CreditCard | Transaction | InstallmentGroup | RecurringRule | Pot | PotMovement | Budget;
