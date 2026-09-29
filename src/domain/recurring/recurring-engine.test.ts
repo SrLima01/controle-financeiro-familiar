@@ -21,7 +21,7 @@ describe("recurring engine",()=>{
  });
  it("does not generate beyond end date",()=>{
    const rule=createRecurringRule({...base,endDate:"2026-02-28"});
-   const data={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
+   const data: EntityCollection = {people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
    expect(generateRecurringTransactions(data,rule,"2026-12-31").generated).toHaveLength(2);
  });
 });
