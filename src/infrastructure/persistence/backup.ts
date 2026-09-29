@@ -71,9 +71,15 @@ export function validateBackup(input: unknown): FinanceBackup {
   const allowedTransactionTypes = new Set(["INCOME", "EXPENSE", "TRANSFER", "CARD_PAYMENT"]);
   const allowedStatuses = new Set(["PENDING", "PAID", "RECEIVED", "PLANNED", "CANCELLED"]);
 
+  const activePersonNames = new Set<string>();
   for (const person of data.people) {
-    if (typeof person.name !== "string" || typeof person.active !== "boolean") {
+    if (typeof person.name !== "string" || !person.name.trim() || person.name.trim().length > 80 || typeof person.active !== "boolean") {
       throw new Error("Invalid person " + person.id);
+    }
+    if (person.active) {
+      const key = person.name.trim().toLocaleLowerCase("pt-BR");
+      if (activePersonNames.has(key)) throw new Error("Duplicate active person name: " + person.id);
+      activePersonNames.add(key);
     }
   }
 
