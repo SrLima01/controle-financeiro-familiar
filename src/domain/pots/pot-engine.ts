@@ -17,20 +17,13 @@ export function createPot(name:string,targetCents:number):Pot{
   assertNonNegativeCents(targetCents,"targetCents");
   return {id:crypto.randomUUID(),name:name.trim(),targetCents,active:true};
 }
-export function createPotMovement(data:EntityCollection,input:Omit<PotMovement,"id">):EntityCollection{
+export function createPotMovement(data:EntityCollection,input:Omit<PotMovement,"id">,realBalanceCents:number):EntityCollection{
   const pot=data.pots.find(p=>p.id===input.potId&&p.active); if(!pot)throw new Error("Caixinha não encontrada.");
   assertFinancialDate(input.date); if(!input.description.trim())throw new Error("Informe uma descrição.");
   if(!Number.isSafeInteger(input.amountCents)||input.amountCents<=0)throw new Error("O valor do movimento deve ser maior que zero.");
   const current=getPotBalance(pot.id,data);
   if(input.type==="WITHDRAWAL"&&input.amountCents>current)throw new Error("O resgate não pode ser maior que o saldo da caixinha.");
-  if(input.type==="DEPOSIT"){
-    const free=getFreeCash(
-      data.accounts.filter(a=>a.active).reduce((sum,a)=>sum+a.openingBalanceCents,0),
-      data
-    );
-    // Caller must supply the actual real balance through the overload below; this guard is intentionally not used by UI.
-    void free;
-  }
+  if(input.type==="DEPOSIT" && input.amountCents>getFreeCash(realBalanceCents,data)) throw new Error("O valor excede o dinheiro livre disponível.");
   const movement:PotMovement={...input,id:crypto.randomUUID(),description:input.description.trim()};
   return {...data,potMovements:[...data.potMovements,movement]};
 }
