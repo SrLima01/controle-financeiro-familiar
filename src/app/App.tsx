@@ -6,7 +6,7 @@ import type { EntityCollection } from "../infrastructure/persistence/repository"
 import type { Person, Category } from "../domain/types/entities";
 import { IndexedDbFinanceRepository } from "../infrastructure/persistence/indexeddb";
 import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateTransaction } from "../domain/transactions/financial-engine";
-import { calculateCardAvailableLimit, calculateCardOutstanding, getCardInvoice, validateCreditCard } from "../domain/cards/card-engine";
+import { calculateCardAvailableLimit, calculateCardOutstanding, getCardInvoice, validateCreditCard, validateCreditCardUpdate } from "../domain/cards/card-engine";
 import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
 import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
 import { pullFinanceState } from "../infrastructure/supabase/sync";
