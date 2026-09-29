@@ -62,7 +62,7 @@ describe("card engine", () => {
       },
       {
         id: "current-payment",
-        date: "2026-09-15",
+        date: "2026-10-15",
         type: "CARD_PAYMENT",
         status: "PAID",
         amountCents: 15000,
@@ -72,7 +72,7 @@ describe("card engine", () => {
       },
     ];
 
-    const invoice = getCardInvoice(card, tx, "2026-09-12");
+    const invoice = getCardInvoice(card, tx, "2026-10-12");
     expect(invoice.purchaseTotalCents).toBe(30000);
     expect(invoice.paymentTotalCents).toBe(15000);
     expect(invoice.openAmountCents).toBe(15000);
