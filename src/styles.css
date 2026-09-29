@@ -9,3 +9,5 @@
 .report-section{display:grid;gap:12px}.report-list{display:grid;gap:4px}.report-row{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--border,#eee)}.report-row:last-child{border-bottom:0}
 
 .settings-list{display:grid;gap:0}.settings-list>div{padding:16px 0;border-bottom:1px solid var(--border,#eee)}.settings-list>div:last-child{border-bottom:0}.settings-list p{margin:6px 0 12px;opacity:.72}.settings-list input[type=file]{max-width:100%}
+
+.insight-list{display:grid;gap:12px}.insight{border-left:4px solid var(--border,#ddd)}.insight p{margin:6px 0 0;opacity:.78}.insight.attention{border-left-color:#b7791f}.insight.positive{border-left-color:#2f855a}.insight.info{border-left-color:#3182ce}
