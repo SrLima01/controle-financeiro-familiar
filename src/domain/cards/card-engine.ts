@@ -83,8 +83,13 @@ export function invoiceClosingDate(purchaseDate: string, closingDay: number): st
   if (!Number.isInteger(closingDay) || closingDay < 1 || closingDay > 31) {
     throw new Error("Invalid closing day");
   }
-  if (d <= closingDay) return iso(y, m, closingDay);
-  return iso(m === 12 ? y + 1 : y, m === 12 ? 1 : m + 1, closingDay);
+
+  const currentClosingDay = Math.min(closingDay, daysInMonth(y, m));
+  if (d <= currentClosingDay) return iso(y, m, closingDay);
+
+  const nextM = m === 12 ? 1 : m + 1;
+  const nextY = m === 12 ? y + 1 : y;
+  return iso(nextY, nextM, closingDay);
 }
 
 export function invoiceDueDateFromClosing(
