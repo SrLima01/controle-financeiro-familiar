@@ -448,7 +448,7 @@ function SmartInput({data,onChange}:{data:EntityCollection;onChange:(next:Entity
    finally{setBusy(false)}
  }
  const categories=data.categories.filter(c=>c.active&&c.kind===(draft?.type==="INCOME"?"INCOME":"EXPENSE"));
- const canConfirm=!!draft && (draft.type==="INCOME" ? !!draft.accountId && !!draft.categoryId : draft.type==="EXPENSE" ? !!draft.categoryId && (!!draft.accountId !== !!draft.creditCardId) : draft.type==="TRANSFER" ? !!draft.accountId && !!draft.destinationAccountId && draft.accountId!==draft.destinationAccountId : false);
+ const canConfirm=!!draft && (draft.type==="INCOME" ? !!draft.accountId && !!draft.categoryId : draft.type==="EXPENSE" ? !!draft.categoryId && (!!draft.accountId !== !!draft.creditCardId) : draft.type==="TRANSFER" ? !!draft.accountId && !!draft.destinationAccountId && draft.accountId!==draft.destinationAccountId : draft.type==="CARD_PAYMENT" ? !!draft.accountId && !!draft.creditCardId : false);
  return <div className="page-content">
    <div className="page-heading"><div><span className="eyebrow">Entrada rápida</span><h1>Entrada inteligente</h1></div></div>
    <section className="panel form-panel">
@@ -461,14 +461,14 @@ function SmartInput({data,onChange}:{data:EntityCollection;onChange:(next:Entity
      <div className="smart-review-head"><div><span className="eyebrow">Revisão</span><h2>Confira antes de salvar</h2></div><span className={`smart-confidence ${draft.confidence.toLowerCase()}`}>{draft.confidence}</span></div>
      {draft.warnings.length>0&&<div className="alert error"><strong>Atenção:</strong><ul>{draft.warnings.map(w=><li key={w}>{w}</li>)}</ul></div>}
      <div className="form-grid">
-       <label>Tipo<select value={draft.type} onChange={e=>update("type",e.target.value as TransactionType)}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option></select></label>
+       <label>Tipo<select value={draft.type} onChange={e=>update("type",e.target.value as TransactionType)}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
        <label>Valor<input inputMode="decimal" value={(draft.amountCents/100).toFixed(2).replace(".",",")} onChange={e=>{const c=parseSmartAmount(e.target.value);if(c!==null)update("amountCents",c)}}/></label>
        <label>Data<input type="date" value={draft.date} onChange={e=>update("date",e.target.value)}/></label>
        <label>Descrição<input value={draft.description} onChange={e=>update("description",e.target.value)}/></label>
        {(draft.type==="INCOME"||draft.type==="EXPENSE")&&<label>Categoria<select value={draft.categoryId??""} onChange={e=>update("categoryId",e.target.value||undefined)}><option value="">Selecione</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
        <label>Conta de origem/recebimento<select value={draft.accountId??""} onChange={e=>{update("accountId",e.target.value||undefined);if(draft.type==="EXPENSE"&&e.target.value)update("creditCardId",undefined)}}><option value="">Selecione</option>{data.accounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
        {draft.type==="TRANSFER"&&<label>Conta de destino<select value={draft.destinationAccountId??""} onChange={e=>update("destinationAccountId",e.target.value||undefined)}><option value="">Selecione</option>{data.accounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
-       {draft.type==="EXPENSE"&&<label>Cartão (opcional)<select value={draft.creditCardId??""} onChange={e=>{update("creditCardId",e.target.value||undefined);if(e.target.value)update("accountId",undefined)}}><option value="">Nenhum</option>{data.cards.filter(c=>c.active).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+       {(draft.type==="EXPENSE"||draft.type==="CARD_PAYMENT")&&<label>Cartão{draft.type==="EXPENSE"?" (opcional)":""}<select value={draft.creditCardId??""} onChange={e=>{update("creditCardId",e.target.value||undefined);if(e.target.value&&draft.type==="EXPENSE")update("accountId",undefined)}}><option value="">Selecione</option>{data.cards.filter(c=>c.active).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
      </div>
      <div className="form-actions"><button className="primary" disabled={busy||!canConfirm} onClick={()=>void confirm()}>{busy?"Salvando…":"Confirmar lançamento"}</button></div>
      <p className="form-note">O parser apenas propõe um lançamento. A confirmação passa pelo mesmo motor de validação dos lançamentos manuais.</p>
