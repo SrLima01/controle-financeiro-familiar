@@ -194,29 +194,18 @@ export function calculateCardOutstanding(
   card: CreditCard,
   transactions: readonly Transaction[],
 ): number {
-  let total = 0;
+  let purchases = 0;
   for (const tx of transactions) {
-    if (
-      tx.status !== "CANCELLED" &&
-      tx.creditCardId === card.id &&
-      tx.type === "EXPENSE" && tx.status === "PAID"
-    ) {
-      total += tx.amountCents;
+    if (tx.status === "PAID" && tx.creditCardId === card.id && tx.type === "EXPENSE") {
+      purchases += tx.amountCents;
     }
   }
 
-  for (const tx of transactions) {
-    if (
-      tx.status !== "CANCELLED" &&
-      tx.creditCardId === card.id &&
-      tx.type === "CARD_PAYMENT" && tx.status === "PAID"
-    ) {
-      total -= tx.amountCents;
-    }
-  }
-
-  assertCents(total, "cardOutstanding");
-  return Math.max(0, total);
+  const allocatedPayments = allocateCardPayments(card, transactions)
+    .reduce((sum, allocation) => sum + allocation.amountCents, 0);
+  const outstanding = Math.max(0, purchases - allocatedPayments);
+  assertCents(outstanding, "cardOutstanding");
+  return outstanding;
 }
 
 export function calculateCardAvailableLimit(
