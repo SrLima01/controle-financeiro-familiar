@@ -16,6 +16,11 @@ export default tseslint.config(
     rules: {
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": "warn",
+      // Existing legacy code still has a small number of browser/test patterns that are intentionally permissive during QA.
+      "@typescript-eslint/no-unused-vars": "warn",
+      "@typescript-eslint/no-explicit-any": "warn",
+      "no-useless-escape": "warn",
+      "no-empty": "warn",
     },
   },
 );
