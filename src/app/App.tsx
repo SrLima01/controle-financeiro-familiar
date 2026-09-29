@@ -669,7 +669,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></header>
     {error && <div className="global-alert">{error}</div>}{loading ? <div className="loading">Carregando dados financeiros…</div> : content}
-    <nav className="bottom-nav">{([["dashboard","Início","⌂"],["contas","Contas","▣"],["transacoes","Lançamentos","＋"],["cartoes","Cartões","▤"],["relatorios","Relatórios","▥"],["mais","Mais","•••"]] as const).map(([key,label,icon])=><button className={page===key?"active":""} key={key} onClick={()=>setPage(key)}><span>{icon}</span><small>{label}</small></button>)}</nav>
+    <nav className="bottom-nav">{([["dashboard","Início","⌂"],["contas","Contas","▣"],["transacoes","Lançamentos","＋"],["cartoes","Cartões","▤"],["relatorios","Relatórios","▥"],["mais","Mais","•••"]] as const).map(([key,label,icon])=><button className={page===key?"active":""} key={key} onClick={()=>setPage(key)} aria-current={page===key?"page":undefined} aria-label={label}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
   </div>;
 }
 
