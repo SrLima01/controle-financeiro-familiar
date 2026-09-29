@@ -1,4 +1,4 @@
-import type { Account, Category, CreditCard, InstallmentGroup, Person, Pot, PotMovement, RecurringRule, Transaction } from "../../domain/types/entities";
+import type { Account, Category, CreditCard, InstallmentGroup, Person, Pot, PotMovement, RecurringRule, Transaction, Budget } from "../../domain/types/entities";
 
 export type EntityMap = {
   people: Person;
@@ -10,6 +10,7 @@ export type EntityMap = {
   recurringRules: RecurringRule;
   pots: Pot;
   potMovements: PotMovement;
+  budgets: Budget;
 };
 
 export type EntityCollection = { [K in keyof EntityMap]: EntityMap[K][] };
