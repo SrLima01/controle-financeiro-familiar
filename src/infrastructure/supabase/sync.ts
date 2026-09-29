@@ -1,4 +1,5 @@
 import type { EntityCollection } from "../persistence/repository";
+import { emptyEntityCollection, validateBackup } from "../persistence/backup";
 import { supabase } from "./client";
 
 export type RemoteFinanceState = {
@@ -17,11 +18,9 @@ export class SyncConflictError extends Error {
   }
 }
 
-function isEntityCollection(value: unknown): value is EntityCollection {
-  if (!value || typeof value !== "object") return false;
-  const data = value as Record<string, unknown>;
-  return ["people", "categories", "accounts", "cards", "transactions", "installmentGroups"]
-    .every(key => Array.isArray(data[key]));
+function validateRemoteState(value: unknown, schemaVersion: number): EntityCollection {
+  const candidate = { schemaVersion, appVersion: "remote", exportedAt: new Date(0).toISOString(), data: value };
+  return validateBackup(candidate).data;
 }
 
 export async function pullFinanceState(familyId: string): Promise<RemoteFinanceState | null> {
@@ -33,11 +32,11 @@ export async function pullFinanceState(familyId: string): Promise<RemoteFinanceS
 
   if (error) throw error;
   if (!data) return null;
-  if (!isEntityCollection(data.state)) throw new Error("Estado financeiro remoto inválido.");
+  const state = validateRemoteState(data.state, Number(data.schema_version));
   return {
     familyId: data.family_id,
-    schemaVersion: data.schema_version,
-    state: data.state,
+    schemaVersion: Number(data.schema_version),
+    state,
     version: Number(data.version),
     updatedAt: data.updated_at,
     updatedBy: data.updated_by
@@ -49,6 +48,7 @@ export async function pushFinanceState(
   state: EntityCollection,
   expectedVersion: number
 ): Promise<number> {
+  validateRemoteState(state, 1);
   const { data, error } = await supabase.rpc("save_finance_state", {
     p_family_id: familyId,
     p_state: state,
@@ -62,3 +62,5 @@ export async function pushFinanceState(
 
   return Number(data);
 }
+
+export { emptyEntityCollection };
