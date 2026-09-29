@@ -81,15 +81,15 @@ export function getCardInvoice(
 
   for (const tx of transactions) {
     if (tx.status === "CANCELLED" || tx.creditCardId !== card.id) continue;
-    if (tx.type === "EXPENSE" && tx.date > previousClose && tx.date <= closing) {
+    if (tx.type === "EXPENSE" && tx.status !== "PLANNED" && tx.date > previousClose && tx.date <= closing) {
       purchases += tx.amountCents;
     }
-    if (tx.type === "CARD_PAYMENT" && tx.date >= previousClose && tx.date <= due) {
+    if (tx.type === "CARD_PAYMENT" && tx.status === "PAID" && tx.date >= closing && tx.date <= due) {
       payments += tx.amountCents;
     }
   }
 
-  const open = purchases - payments;
+  const open = Math.max(0, purchases - payments);
   assertCents(purchases);
   assertCents(payments);
   assertCents(open);
