@@ -26,14 +26,14 @@ describe("installment engine", () => {
 
   it("cancels only the selected installment", () => {
     const created = buildInstallmentSet(base);
-    const data: EntityCollection = { people: [], categories: [], accounts: [{ id: "account-1", name: "Conta", type: "CHECKING" as const, openingBalanceCents: 0, active: true }], cards: [], transactions: created.transactions, installmentGroups: [created.group] };
+    const data: EntityCollection = { people: [], categories: [], accounts: [{ id: "account-1", name: "Conta", type: "CHECKING" as const, openingBalanceCents: 0, active: true }], cards: [], transactions: created.transactions, installmentGroups: [created.group], recurringRules: [], pots: [], potMovements: [], budgets: [] };
     const next = cancelInstallments(data, created.group.id, created.transactions[1].id, "ONE");
     expect(next.transactions.map(t => t.status)).toEqual(["PLANNED", "CANCELLED", "PLANNED"]);
   });
 
   it("cancels the selected installment and all following", () => {
     const created = buildInstallmentSet(base);
-    const data = { people: [], categories: [], accounts: [{ id: "account-1", name: "Conta", type: "CHECKING" as const, openingBalanceCents: 0, active: true }], cards: [], transactions: created.transactions, installmentGroups: [created.group] };
+    const data = { people: [], categories: [], accounts: [{ id: "account-1", name: "Conta", type: "CHECKING" as const, openingBalanceCents: 0, active: true }], cards: [], transactions: created.transactions, installmentGroups: [created.group], recurringRules: [], pots: [], potMovements: [], budgets: [] };
     const next = cancelInstallments(data, created.group.id, created.transactions[1].id, "THIS_AND_FOLLOWING");
     expect(next.transactions.map(t => t.status)).toEqual(["PLANNED", "CANCELLED", "CANCELLED"]);
     expect(getInstallmentNumber(created.group, created.transactions[2].id)).toBe(3);
