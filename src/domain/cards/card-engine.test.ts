@@ -27,7 +27,7 @@ describe("card engine", () => {
     const tx: Transaction[] = [
       {
         id: "1",
-        date: "2026-09-05",
+        date: "2026-09-11",
         type: "EXPENSE",
         status: "PAID",
         amountCents: 25000,
@@ -145,7 +145,7 @@ describe("card engine", () => {
     const tx: Transaction[] = [
       {
         id: "1",
-        date: "2026-09-05",
+        date: "2026-09-11",
         type: "EXPENSE",
         status: "PAID",
         amountCents: 10000,
@@ -154,7 +154,7 @@ describe("card engine", () => {
       },
       {
         id: "2",
-        date: "2026-09-15",
+        date: "2026-10-15",
         type: "CARD_PAYMENT",
         status: "PAID",
         amountCents: 20000,
@@ -164,6 +164,6 @@ describe("card engine", () => {
       },
     ];
 
-    expect(getCardInvoice(card, tx, "2026-09-12").openAmountCents).toBe(0);
+    expect(getCardInvoice(card, tx, "2026-10-10").openAmountCents).toBe(0);
   });
 });
