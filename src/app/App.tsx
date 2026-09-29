@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { EntityCollection } from "../infrastructure/persistence/repository";
 import { IndexedDbFinanceRepository } from "../infrastructure/persistence/indexeddb";
@@ -422,7 +422,7 @@ function SmartInput({data,onChange}:{data:EntityCollection;onChange:(next:Entity
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const [listening,setListening]=useState(false);
- const recognitionRef=useState<{current:any}>(()=>({current:null}))[0];
+ const recognitionRef=useRef<any>(null);
  function startVoice(){
    setError("");
    const SpeechRecognition=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
