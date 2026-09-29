@@ -83,6 +83,7 @@ export function validateBackup(input: unknown): FinanceBackup {
     }
   }
 
+  const activeCategoryKeys = new Set<string>();
   for (const category of data.categories) {
     if (
       typeof category.name !== "string" ||
