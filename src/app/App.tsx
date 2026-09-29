@@ -19,7 +19,9 @@ function money(cents:number) {
   return new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(cents / 100);
 }
 
-function todayFinancialDate() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }\n\nfunction todayMonth() {
+function todayFinancialDate() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+
+function todayMonth() {
   const d = new Date();
   return d.toLocaleDateString("pt-BR", { month:"long", year:"numeric" });
 }
