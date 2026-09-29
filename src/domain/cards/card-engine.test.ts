@@ -27,7 +27,7 @@ describe("card engine", () => {
     const tx: Transaction[] = [
       {
         id: "1",
-        date: "2026-09-11",
+        date: "2026-09-05",
         type: "EXPENSE",
         status: "PAID",
         amountCents: 25000,
