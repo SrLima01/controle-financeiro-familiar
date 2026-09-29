@@ -359,7 +359,7 @@ function Budgets({data,onChange}:{data:EntityCollection;onChange:(next:EntityCol
      const cents=parseAmount(limit); if(!categoryId)throw new Error("Selecione uma categoria.");
      const duplicate=data.budgets.find(b=>b.active&&b.month===month&&b.categoryId===categoryId&&b.id!==editing?.id);
      if(duplicate)throw new Error("Já existe um orçamento ativo para esta categoria neste mês.");
-     const budget=editing?{...editing,month,categoryId,limitCents:cents,active:true}:createBudget(month,categoryId,cents);
+     const budget=editing?{...editing,month,categoryId,limitCents:cents,active:true}:createBudget(month,categoryId,cents,data);
      const next={...data,budgets:editing?data.budgets.map(b=>b.id===budget.id?budget:b):[...data.budgets,budget]};
      setBusy(true);await onChange(next);reset();
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar o orçamento.")}finally{setBusy(false)}
