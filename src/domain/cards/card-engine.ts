@@ -40,9 +40,11 @@ export type CardInvoice = {
   openAmountCents: number;
 };
 
+type InvoicePurchase = { date: string; amountCents: number };
 type InvoiceBucket = {
   closingDate: string;
   dueDate: string;
+  purchases: InvoicePurchase[];
   purchaseTotalCents: number;
   paymentTotalCents: number;
 };
@@ -111,11 +113,13 @@ export function allocateCardPayments(
     const closingDate = invoiceClosingDate(tx.date, card.closingDay);
     const existing = buckets.get(closingDate);
     if (existing) {
+      existing.purchases.push({ date: tx.date, amountCents: tx.amountCents });
       existing.purchaseTotalCents += tx.amountCents;
     } else {
       buckets.set(closingDate, {
         closingDate,
         dueDate: invoiceDueDateFromClosing(closingDate, card.closingDay, card.dueDay),
+        purchases: [{ date: tx.date, amountCents: tx.amountCents }],
         purchaseTotalCents: tx.amountCents,
         paymentTotalCents: 0,
       });
@@ -132,8 +136,10 @@ export function allocateCardPayments(
     let remaining = payment.amountCents;
     for (const invoice of invoices) {
       if (remaining <= 0) break;
-      if (invoice.closingDate > payment.date) continue;
-      const open = invoice.purchaseTotalCents - invoice.paymentTotalCents;
+      const eligiblePurchases = invoice.purchases
+        .filter(purchase => purchase.date <= payment.date)
+        .reduce((sum, purchase) => sum + purchase.amountCents, 0);
+      const open = eligiblePurchases - invoice.paymentTotalCents;
       if (open <= 0) continue;
       const applied = Math.min(remaining, open);
       invoice.paymentTotalCents += applied;
