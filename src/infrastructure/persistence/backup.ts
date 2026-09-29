@@ -47,6 +47,8 @@ export function validateBackup(input: unknown): FinanceBackup {
     throw new Error("Invalid backup metadata");
   }
   if (!isRecord(input.data)) throw new Error("Backup data is required");
+  // Backward compatibility: states created before Fase 10 do not have this collection.
+  if (!("recurringRules" in input.data)) input.data.recurringRules = [];
 
   for (const collection of COLLECTIONS) {
     assertArray(input.data[collection], collection);
