@@ -18,6 +18,7 @@ import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, month
 import type { Budget, Pot, RecurringFrequency, RecurringRule } from "../domain/types/entities";
 import { exportJson, exportTransactionsCsv, importJson } from "../infrastructure/persistence/export";
 import { analyzeFinances } from "../domain/assistant/assistant-engine";
+import { parseSmartAmount, parseSmartInput, type SmartDraft } from "../domain/smart-input/smart-parser";
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais" | "relatorios";
 const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [], budgets: [] };
@@ -139,7 +140,7 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
   </div>;
 }
 
-function parseAmount(value:string):number{const normalized=value.trim().replace(/\\./g,"").replace(",",".");const n=Number(normalized);if(!Number.isFinite(n)||n<0)throw new Error("Informe um valor válido.");const cents=Math.round(n*100);assertCents(cents,"amountCents");return cents}
+function parseAmount(value:string):number{const cents=parseSmartAmount(value);if(cents===null)throw new Error("Informe um valor válido.");assertCents(cents,"amountCents");return cents}
 
 function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
  const [editing,setEditing]=useState<Transaction|null>(null);
@@ -415,9 +416,68 @@ function Assistant({data}:{data:EntityCollection}) {
  </div>;
 }
 
+function SmartInput({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+ const [text,setText]=useState("");
+ const [draft,setDraft]=useState<SmartDraft|null>(null);
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
+ function interpret(){
+   setError("");
+   try{ setDraft(parseSmartInput(text,{categories:data.categories,accounts:data.accounts,cards:data.cards})); }
+   catch(e){setDraft(null);setError(e instanceof Error?e.message:"Não foi possível interpretar.");}
+ }
+ function update<K extends keyof SmartDraft>(key:K,value:SmartDraft[K]){setDraft(d=>d?{...d,[key]:value}:d)}
+ async function confirm(){
+   if(!draft)return;
+   setError("");
+   try{
+     const amountCents=parseSmartAmount(String(draft.amountCents/100).replace(".",",")) ?? 0;
+     const tx:Transaction={
+       id:crypto.randomUUID(),date:draft.date,type:draft.type,status:draft.type==="INCOME"?"RECEIVED":"PAID",
+       amountCents,description:draft.description.trim(),
+       ...(draft.categoryId?{categoryId:draft.categoryId}:{}),
+       ...(draft.accountId?{accountId:draft.accountId}:{}),
+       ...(draft.destinationAccountId?{destinationAccountId:draft.destinationAccountId}:{}),
+       ...(draft.creditCardId?{creditCardId:draft.creditCardId}:{})
+     };
+     validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});
+     setBusy(true);
+     await onChange({...data,transactions:[...data.transactions,tx]});
+     setText("");setDraft(null);
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível confirmar.");}
+   finally{setBusy(false)}
+ }
+ const categories=data.categories.filter(c=>c.active&&c.kind===(draft?.type==="INCOME"?"INCOME":"EXPENSE"));
+ return <div className="page-content">
+   <div className="page-heading"><div><span className="eyebrow">Entrada rápida</span><h1>Entrada inteligente</h1></div></div>
+   <section className="panel form-panel">
+     <p className="muted">Digite como você falaria normalmente. Nada é salvo até você revisar e confirmar.</p>
+     <label>O que aconteceu?<textarea value={text} onChange={e=>setText(e.target.value)} rows={4} placeholder='Ex.: "Paguei 150 no mercado ontem"'/></label>
+     {error&&<div className="global-alert">{error}</div>}
+     <div className="form-actions"><button className="primary" disabled={!text.trim()||busy} onClick={interpret}>Interpretar</button>{draft&&<button className="secondary" onClick={()=>{setDraft(null);setError("")}}>Descartar</button>}</div>
+   </section>
+   {draft&&<section className="panel form-panel">
+     <div className="smart-review-head"><div><span className="eyebrow">Revisão</span><h2>Confira antes de salvar</h2></div><span className={`smart-confidence ${draft.confidence.toLowerCase()}`}>{draft.confidence}</span></div>
+     {draft.warnings.length>0&&<div className="alert error"><strong>Atenção:</strong><ul>{draft.warnings.map(w=><li key={w}>{w}</li>)}</ul></div>}
+     <div className="form-grid">
+       <label>Tipo<select value={draft.type} onChange={e=>update("type",e.target.value as TransactionType)}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option></select></label>
+       <label>Valor<input inputMode="decimal" value={(draft.amountCents/100).toFixed(2).replace(".",",")} onChange={e=>{const c=parseSmartAmount(e.target.value);if(c!==null)update("amountCents",c)}}/></label>
+       <label>Data<input type="date" value={draft.date} onChange={e=>update("date",e.target.value)}/></label>
+       <label>Descrição<input value={draft.description} onChange={e=>update("description",e.target.value)}/></label>
+       {(draft.type==="INCOME"||draft.type==="EXPENSE")&&<label>Categoria<select value={draft.categoryId??""} onChange={e=>update("categoryId",e.target.value||undefined)}><option value="">Selecione</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+       <label>Conta de origem/recebimento<select value={draft.accountId??""} onChange={e=>update("accountId",e.target.value||undefined)}><option value="">Selecione</option>{data.accounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+       {draft.type==="TRANSFER"&&<label>Conta de destino<select value={draft.destinationAccountId??""} onChange={e=>update("destinationAccountId",e.target.value||undefined)}><option value="">Selecione</option>{data.accounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+       {draft.type==="EXPENSE"&&<label>Cartão (opcional)<select value={draft.creditCardId??""} onChange={e=>update("creditCardId",e.target.value||undefined)}><option value="">Nenhum</option>{data.cards.filter(c=>c.active).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+     </div>
+     <div className="form-actions"><button className="primary" disabled={busy||draft.warnings.length>0} onClick={()=>void confirm()}>{busy?"Salvando…":"Confirmar lançamento"}</button></div>
+     <p className="form-note">O parser apenas propõe um lançamento. A confirmação passa pelo mesmo motor de validação dos lançamentos manuais.</p>
+   </section>}
+ </div>;
+}
+
 function More({data,onChange,onSignOut}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
- const [section,setSection]=useState<"pots"|"recurring"|"budgets"|"assistant"|"settings">("pots");
- return <>{<div className="subnav"><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
+ const [section,setSection]=useState<"smart"|"pots"|"recurring"|"budgets"|"assistant"|"settings">("smart");
+ return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
