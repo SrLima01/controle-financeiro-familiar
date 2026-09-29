@@ -12,10 +12,11 @@ import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, 
 import { assertCents } from "../domain/money/cents";
 import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
 import { createRecurringRule, deactivateRecurringRule, generateRecurringTransactions } from "../domain/recurring/recurring-engine";
-import type { RecurringFrequency, RecurringRule } from "../domain/types/entities";
+import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
+import type { Pot, RecurringFrequency, RecurringRule } from "../domain/types/entities";
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais";
-const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [] };
+const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [] };
 const repo = new IndexedDbFinanceRepository();
 
 function money(cents:number) {
@@ -314,6 +315,35 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
  </div>;
 }
 
+function Pots({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+ const [editing,setEditing]=useState<Pot|null>(null);
+ const [name,setName]=useState(""); const [target,setTarget]=useState(""); const [amount,setAmount]=useState(""); const [movementType,setMovementType]=useState<"DEPOSIT"|"WITHDRAWAL">("DEPOSIT");
+ const [description,setDescription]=useState(""); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+ const real=useMemo(()=>calculateTotalRealBalance({accounts:data.accounts,cards:data.cards,transactions:data.transactions}),[data]);
+ const reserved=getTotalReserved(data), free=getFreeCash(real,data);
+ const active=data.pots.filter(p=>p.active);
+ function reset(){setEditing(null);setName("");setTarget("");setAmount("");setMovementType("DEPOSIT");setDescription("");setError("")}
+ async function savePot(){
+   setError("");try{const targetCents=parseAmount(target);const pot=createPot(name,targetCents);setBusy(true);await onChange({...data,pots:[...data.pots,pot]});reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível criar a caixinha.")}finally{setBusy(false)}
+ }
+ async function movement(potId:string){
+   setError("");try{const cents=parseAmount(amount);const next=createPotMovement(data,{potId,type:movementType,amountCents:cents,date:todayFinancialDate(),description:description|| (movementType==="DEPOSIT"?"Reserva":"Resgate")},real);setBusy(true);await onChange(next);setAmount("");setDescription("")}catch(e){setError(e instanceof Error?e.message:"Não foi possível registrar o movimento.")}finally{setBusy(false)}
+ }
+ async function archive(pot:Pot){if(!confirm("Arquivar esta caixinha? O histórico dos movimentos será preservado."))return;setBusy(true);setError("");try{await onChange(archivePot(data,pot.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
+ return <div className="page-content">
+   <div className="page-heading"><div><span className="eyebrow">Reservas</span><h1>Caixinhas</h1></div><button className="primary compact" onClick={reset}>+ Nova caixinha</button></div>
+   {error&&<div className="global-alert">{error}</div>}
+   <section className="metric-grid"><article className="metric"><span>Dinheiro livre</span><strong>{money(free)}</strong><small>Saldo real menos reservas ativas.</small></article><article className="metric"><span>Total reservado</span><strong>{money(reserved)}</strong><small>Valor separado nas caixinhas.</small></article></section>
+   <section className="panel pot-list">{active.length===0?<Empty text="Nenhuma caixinha criada."/>:active.map(p=>{const balance=getPotBalance(p.id,data);const percent=p.targetCents>0?Math.min(100,balance/p.targetCents*100):0;return <article className="pot-card" key={p.id}><div className="pot-head"><div><strong>{p.name}</strong><span>Meta {money(p.targetCents)}</span></div><strong>{money(balance)}</strong></div><div className="pot-progress"><div style={{width:`${percent}%`}}/></div><small>{percent.toFixed(0)}% da meta</small><div className="pot-movement-form"><select value={movementType} onChange={e=>setMovementType(e.target.value as "DEPOSIT"|"WITHDRAWAL")}><option value="DEPOSIT">Depositar</option><option value="WITHDRAWAL">Resgatar</option></select><input inputMode="decimal" placeholder="0,00" value={amount} onChange={e=>setAmount(e.target.value)}/><input placeholder="Descrição" value={description} onChange={e=>setDescription(e.target.value)}/><button className="primary compact" disabled={busy} onClick={()=>void movement(p.id)}>Registrar</button></div><div className="row-actions"><button className="link-button danger" disabled={busy} onClick={()=>void archive(p)}>Arquivar</button></div></article>})}</section>
+   <section className="panel form-panel"><h2>Nova caixinha</h2><div className="form-grid"><label>Nome<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Imposto da obra"/></label><label>Meta<input inputMode="decimal" value={target} onChange={e=>setTarget(e.target.value)} placeholder="2.000,00"/></label></div><div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void savePot()}>{busy?"Salvando…":"Criar caixinha"}</button></div><p className="form-note">Caixinhas são reservas lógicas: não retiram dinheiro novamente da conta. O saldo real continua sendo o das contas; o dinheiro livre é calculado descontando as reservas.</p></section>
+ </div>;
+}
+
+function More({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+ const [section,setSection]=useState<"pots"|"recurring">("pots");
+ return <>{<div className="subnav"><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button></div>}{section==="pots"?<Pots data={data} onChange={onChange}/>:<Recurring data={data} onChange={onChange}/>}</>;
+}
+
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
  const [editing,setEditing]=useState<CreditCard|null>(null),[name,setName]=useState(""),[accountId,setAccountId]=useState(""),[limit,setLimit]=useState(""),[closingDay,setClosingDay]=useState("10"),[dueDay,setDueDay]=useState("20"),[busy,setBusy]=useState(false),[error,setError]=useState("");
  const accounts=data.accounts.filter(a=>a.active);
@@ -336,7 +366,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     let cancelled=false;
     (async()=>{
       try {
-        const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules")};
+        const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules"),pots:await repo.list("pots"),potMovements:await repo.list("potMovements")};
         if(!cancelled)setData(local);
         const remote=await pullFinanceState(family.id);
         if(remote && !cancelled){ await repo.replaceAll(remote.state); setData(remote.state); setRemoteVersion(remote.version); }
@@ -355,7 +385,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
-    page==="mais" ? <Recurring data={data} onChange={persist}/> :
+    page==="mais" ? <More data={data} onChange={persist}/> :
     <Placeholder title="Mais" text="Parcelamentos, recorrências, caixinhas, orçamentos, relatórios e assistente serão adicionados por etapas."/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></header>
