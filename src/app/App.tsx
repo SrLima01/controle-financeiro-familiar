@@ -108,7 +108,7 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
   const [editing,setEditing]=useState<Account|null>(null);
   const [name,setName]=useState(""); const [type,setType]=useState<AccountType>("CHECKING"); const [opening,setOpening]=useState("");
   const [busy,setBusy]=useState(false); const [error,setError]=useState("");
-  function reset(){setEditing(null);setName("");setType("CHECKING");setOpening("");setError("");}
+  function reset(){setName("");setType("CHECKING");setOpening("");setError("");}
   function edit(a:Account){setEditing(a);setName(a.name);setType(a.type);setOpening((a.openingBalanceCents/100).toFixed(2).replace(".",","));setError("");}
   async function save(){
     setError(""); const value=Number(opening.replace(/\\./g,"").replace(",","."));
@@ -316,7 +316,6 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
 }
 
 function Pots({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
- const [editing,setEditing]=useState<Pot|null>(null);
  const [name,setName]=useState(""); const [target,setTarget]=useState(""); const [amount,setAmount]=useState(""); const [movementType,setMovementType]=useState<"DEPOSIT"|"WITHDRAWAL">("DEPOSIT");
  const [description,setDescription]=useState(""); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const real=useMemo(()=>calculateTotalRealBalance({accounts:data.accounts,cards:data.cards,transactions:data.transactions}),[data]);
