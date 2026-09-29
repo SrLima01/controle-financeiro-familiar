@@ -108,6 +108,29 @@ describe("card engine", () => {
     expect(invoice.openAmountCents).toBe(15000);
   });
 
+  it("counts a payment made exactly on the invoice due date", () => {
+    const transactions = [
+      tx("purchase-1", "2026-09-05", "EXPENSE", 5000),
+      tx("payment-1", "2026-09-20", "CARD_PAYMENT", 5000),
+    ];
+
+    expect(getCardInvoice(card, transactions, "2026-09-10")).toMatchObject({
+      dueDate: "2026-09-20",
+      purchaseTotalCents: 5000,
+      paymentTotalCents: 5000,
+      openAmountCents: 0,
+    });
+  });
+
+  it("allows a late payment to settle an already-realized older invoice", () => {
+    const transactions = [
+      tx("purchase-1", "2026-09-05", "EXPENSE", 5000),
+      tx("payment-1", "2026-10-25", "CARD_PAYMENT", 5000),
+    ];
+
+    expect(calculateCardOutstanding(card, transactions)).toBe(0);
+  });
+
   it("does not restore limit for pending card payments or planned purchases", () => {
     const tx: Transaction[] = [
       {
