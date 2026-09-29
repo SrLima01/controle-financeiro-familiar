@@ -14,9 +14,10 @@ import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from ".
 import { createRecurringRule, deactivateRecurringRule, generateRecurringTransactions } from "../domain/recurring/recurring-engine";
 import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
 import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
+import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
 import type { Budget, Pot, RecurringFrequency, RecurringRule } from "../domain/types/entities";
 
-type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais";
+type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais" | "relatorios";
 const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [], budgets: [] };
 const repo = new IndexedDbFinanceRepository();
 
@@ -367,6 +368,19 @@ function Budgets({data,onChange}:{data:EntityCollection;onChange:(next:EntityCol
  </div>;
 }
 
+function Reports({data}:{data:EntityCollection}) {
+ const [month,setMonth]=useState(()=>todayFinancialDate().slice(0,7));
+ const cats=expensesByCategory(data,month), income=incomeByCategory(data,month), people=expensesByPerson(data,month), flow=cashFlow(data,month), months=monthlyExpenses(data).slice(-6);
+ return <div className="page-content">
+  <div className="page-heading"><div><span className="eyebrow">Análise</span><h1>Relatórios</h1></div><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></div>
+  <section className="metric-grid"><article className="metric"><span>Receitas</span><strong>{money(flow.incomeCents)}</strong></article><article className="metric"><span>Despesas</span><strong>{money(flow.expenseCents)}</strong></article><article className="metric"><span>Resultado</span><strong>{money(flow.netCents)}</strong></article></section>
+  <section className="panel report-section"><h2>Despesas por categoria</h2>{cats.length===0?<Empty text="Nenhuma despesa categorizada neste mês."/>:<div className="report-list">{cats.map(x=><div className="report-row" key={x.categoryId}><span>{x.name}</span><strong>{money(x.amountCents)}</strong></div>)}</div>}</section>
+  <section className="panel report-section"><h2>Receitas por categoria</h2>{income.length===0?<Empty text="Nenhuma receita categorizada neste mês."/>:<div className="report-list">{income.map(x=><div className="report-row" key={x.categoryId}><span>{x.name}</span><strong>{money(x.amountCents)}</strong></div>)}</div>}</section>
+  <section className="panel report-section"><h2>Despesas por pessoa</h2>{people.length===0?<Empty text="Nenhuma despesa vinculada a pessoa neste mês."/>:<div className="report-list">{people.map(x=><div className="report-row" key={x.personId}><span>{x.name}</span><strong>{money(x.amountCents)}</strong></div>)}</div>}</section>
+  <section className="panel report-section"><h2>Evolução mensal de despesas</h2>{months.length===0?<Empty text="Ainda não há histórico de despesas."/>:<div className="report-list">{months.map(x=><div className="report-row" key={x.month}><span>{x.month}</span><strong>{money(x.amountCents)}</strong></div>)}</div>}</section>
+ </div>;
+}
+
 function More({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
  const [section,setSection]=useState<"pots"|"recurring"|"budgets">("pots");
  return <>{<div className="subnav"><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button></div>}{section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:<Budgets data={data} onChange={onChange}/>}</>;
@@ -413,7 +427,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
-    page==="mais" ? <More data={data} onChange={persist}/> :
+    page==="mais" ? <More data={data} onChange={persist}/> : page==="relatorios" ? <Reports data={data}/> :
     <Placeholder title="Mais" text="Parcelamentos, recorrências, caixinhas, orçamentos, relatórios e assistente serão adicionados por etapas."/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></header>
