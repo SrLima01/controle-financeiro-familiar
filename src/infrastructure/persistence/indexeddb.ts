@@ -75,7 +75,7 @@ function runTransaction<T>(
   });
 }
 
-function requestError(request: IDBRequest<unknown>, fail: (error: unknown) => void): void {
+function requestError<T>(request: IDBRequest<T>, fail: (error: unknown) => void): void {
   request.onerror = () => fail(request.error ?? new Error("IndexedDB request failed"));
 }
 
@@ -115,7 +115,7 @@ export class IndexedDbFinanceRepository implements FinanceRepository {
         request.onsuccess = () => {
           const previous = request.result as StoredEntity<EntityMap[K]> | undefined;
           const timestamp = now();
-          const record: StoredEntity<EntityMap[K]> = {
+          const record = {
             ...entity,
             createdAt: previous?.createdAt ?? timestamp,
             updatedAt: timestamp,
