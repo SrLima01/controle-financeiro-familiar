@@ -2,7 +2,7 @@ import type { CreditCard, Transaction } from "../types/entities";
 import { assertCents } from "../money/cents";
 import { assertFinancialDate } from "../date/financial-date";
 
-export type CardInvoice = {
+export function validateCreditCard(card:CreditCard,accountIds:readonly string[]):void{if(!card.id||!card.name.trim())throw new Error("Cartão inválido");assertCents(card.creditLimitCents,"creditLimitCents");if(card.creditLimitCents<0)throw new Error("Credit limit cannot be negative");if(!accountIds.includes(card.accountId))throw new Error("Invalid card payment account");if(!Number.isInteger(card.closingDay)||card.closingDay<1||card.closingDay>31)throw new Error("Invalid closing day");if(!Number.isInteger(card.dueDay)||card.dueDay<1||card.dueDay>31)throw new Error("Invalid due day")}\n\nexport type CardInvoice = {
   cardId:string;
   closingDate:string;
   dueDate:string;
