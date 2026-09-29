@@ -157,9 +157,29 @@ export function validateBackup(input: unknown): FinanceBackup {
 
   const transactionIds = new Set(data.transactions.map(tx => tx.id));
   for (const group of data.installmentGroups) {
+    if (group.transactionIds.length !== group.installmentCount) {
+      throw new Error("Installment group " + group.id + " has an inconsistent transaction count");
+    }
+    const groupTransactionIds = new Set(group.transactionIds);
+    if (groupTransactionIds.size !== group.transactionIds.length) {
+      throw new Error("Installment group " + group.id + " contains duplicate transaction ids");
+    }
     for (const txId of group.transactionIds) {
       if (!transactionIds.has(txId)) {
         throw new Error("Installment group " + group.id + " references an unknown transaction");
+      }
+      const tx = data.transactions.find(item => item.id === txId);
+      if (!tx || tx.installmentGroupId !== group.id) {
+        throw new Error("Installment group " + group.id + " has an inconsistent transaction link");
+      }
+    }
+  }
+
+  for (const tx of data.transactions) {
+    if (tx.installmentGroupId) {
+      const group = data.installmentGroups.find(item => item.id === tx.installmentGroupId);
+      if (!group || !group.transactionIds.includes(tx.id)) {
+        throw new Error("Transaction " + tx.id + " has an inconsistent installment link");
       }
     }
   }
