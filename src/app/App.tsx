@@ -3,7 +3,7 @@ import { archivePerson, createPerson, updatePerson } from "../domain/people/pers
 import { archiveCategory, createCategory, updateCategory } from "../domain/categories/category-engine";
 import type { User } from "@supabase/supabase-js";
 import type { EntityCollection } from "../infrastructure/persistence/repository";
-import type { Person } from "../domain/types/entities";
+import type { Person, Category } from "../domain/types/entities";
 import { IndexedDbFinanceRepository } from "../infrastructure/persistence/indexeddb";
 import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateTransaction } from "../domain/transactions/financial-engine";
 import { calculateCardAvailableLimit, calculateCardOutstanding, getCardInvoice, validateCreditCard } from "../domain/cards/card-engine";
