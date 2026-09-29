@@ -65,31 +65,16 @@ export function getCardInvoice(
   transactions: readonly Transaction[],
   referenceDate: string,
 ): CardInvoice {
-  const { y, m } = dateParts(referenceDate);
-  const closing = invoiceClosingDate(iso(y, m, 1), card.closingDay);
-  const cycleClosing =
-    dateParts(closing).d === 1 && card.closingDay > 1
-      ? iso(m === 1 ? y - 1 : y, m === 1 ? 12 : m - 1, card.closingDay)
-      : closing;
-
-  const closeParts = dateParts(cycleClosing);
-  const previousClose = iso(
-    closeParts.m === 1 ? closeParts.y - 1 : closeParts.y,
-    closeParts.m === 1 ? 12 : closeParts.m - 1,
-    card.closingDay,
-  );
-  const due = invoiceDueDateFromClosing(
-    cycleClosing,
-    card.closingDay,
-    card.dueDay,
-  );
+  const closing = invoiceClosingDate(referenceDate, card.closingDay);
+  const previousClose = previousMonthDate(closing, card.closingDay);
+  const due = invoiceDueDateFromClosing(closing, card.closingDay, card.dueDay);
 
   let purchases = 0;
   let payments = 0;
 
   for (const tx of transactions) {
     if (tx.status === "CANCELLED" || tx.creditCardId !== card.id) continue;
-    if (tx.type === "EXPENSE" && tx.date > previousClose && tx.date <= cycleClosing) {
+    if (tx.type === "EXPENSE" && tx.date > previousClose && tx.date <= closing) {
       purchases += tx.amountCents;
     }
     if (tx.type === "CARD_PAYMENT" && tx.date >= previousClose && tx.date <= due) {
@@ -104,7 +89,7 @@ export function getCardInvoice(
 
   return {
     cardId: card.id,
-    closingDate: cycleClosing,
+    closingDate: closing,
     dueDate: due,
     purchaseTotalCents: purchases,
     paymentTotalCents: payments,
