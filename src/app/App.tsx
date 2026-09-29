@@ -2,12 +2,12 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import type { EntityCollection } from "../infrastructure/persistence/repository";
 import { IndexedDbFinanceRepository } from "../infrastructure/persistence/indexeddb";
-import { calculateProjectedAccountBalance, calculateTotalRealBalance } from "../domain/transactions/financial-engine";
+import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateTransaction } from "../domain/transactions/financial-engine";
 import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
 import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
 import { pullFinanceState } from "../infrastructure/supabase/sync";
 import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator";
-import type { Account, AccountType } from "../domain/types/entities";
+import type { Account, AccountType, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
 import { assertCents } from "../domain/money/cents";
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais";
@@ -128,7 +128,33 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
   </div>;
 }
 
-function Placeholder({title,text}:{title:string;text:string}) { return <div className="page-content"><div className="page-heading"><h1>{title}</h1></div><section className="panel"><Empty text={text}/></section></div>; }
+function parseAmount(value:string):number{const normalized=value.trim().replace(/\\./g,"").replace(",",".");const n=Number(normalized);if(!Number.isFinite(n)||n<0)throw new Error("Informe um valor válido.");const cents=Math.round(n*100);assertCents(cents,"amountCents");return cents}
+
+function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+ const [editing,setEditing]=useState<Transaction|null>(null);const [type,setType]=useState<TransactionType>("EXPENSE");const [status,setStatus]=useState<TransactionStatus>("PAID");const [date,setDate]=useState(()=>new Date().toISOString().slice(0,10));const [amount,setAmount]=useState("");const [description,setDescription]=useState("");const [categoryId,setCategoryId]=useState("");const [accountId,setAccountId]=useState("");const [destinationAccountId,setDestinationAccountId]=useState("");const [creditCardId,setCreditCardId]=useState("");const [personId,setPersonId]=useState("");const [filter,setFilter]=useState<"ALL"|"INCOME"|"EXPENSE"|"TRANSFER"|"CARD_PAYMENT">("ALL");const [busy,setBusy]=useState(false);const [error,setError]=useState("");
+ const activeAccounts=data.accounts.filter(a=>a.active),activeCards=data.cards.filter(c=>c.active),activePeople=data.people.filter(p=>p.active);
+ const activeCategories=data.categories.filter(c=>c.active&&((type==="INCOME"||type==="EXPENSE")?c.kind===(type==="INCOME"?"INCOME":"EXPENSE"):false));
+ const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
+ function reset(){setEditing(null);setType("EXPENSE");setStatus("PAID");setDate(new Date().toISOString().slice(0,10));setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setError("")}
+ function edit(t:Transaction){setEditing(t);setType(t.type);setStatus(t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setError("")}
+ async function save(){setError("");try{const amountCents=parseAmount(amount);const tx:Transaction={id:editing?.id??crypto.randomUUID(),date,type,status,amountCents,description:description.trim(),...(categoryId?{categoryId}:{}),...(accountId?{accountId}:{}),...(destinationAccountId?{destinationAccountId}:{}),...(creditCardId?{creditCardId}:{}),...(personId?{personId}: {})};validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});const next={...data,transactions:editing?data.transactions.map(t=>t.id===tx.id?tx:t):[...data.transactions,tx]};setBusy(true);await onChange(next);reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar o lançamento.")}finally{setBusy(false)}}
+ async function cancel(t:Transaction){if(t.status==="CANCELLED")return;if(!confirm("Cancelar este lançamento? O histórico será preservado."))return;setBusy(true);setError("");try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:"CANCELLED"}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível cancelar.")}finally{setBusy(false)}}
+ function labelType(t:Transaction){return t.type==="TRANSFER"?"Transferência":t.type==="CARD_PAYMENT"?"Pagamento de cartão":t.type==="INCOME"?"Entrada":t.creditCardId?"Compra no cartão":"Saída"}
+ return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Movimentação</span><h1>Transações</h1></div><button className="primary compact" onClick={reset}>+ Novo lançamento</button></div>
+ {error&&<div className="global-alert">{error}</div>}<div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
+ <section className="panel transaction-list">{visible.length===0?<Empty text="Nenhum lançamento encontrado."/>:visible.map(t=><div className="transaction-row" key={t.id}><div><strong>{t.description||labelType(t)}</strong><span>{t.date} · {labelType(t)} · {t.status}</span></div><div className="transaction-value"><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":"+"}{money(t.amountCents)}</strong><div className="row-actions"><button className="link-button" onClick={()=>edit(t)}>Editar</button>{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</div></div></div>)}</section>
+ <section className="panel form-panel"><h2>{editing?"Editar lançamento":"Novo lançamento"}</h2><div className="form-grid">
+ <label>Tipo<select value={type} onChange={e=>{setType(e.target.value as TransactionType);setCategoryId("");setCreditCardId("")}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
+ <label>Status<select value={status} onChange={e=>setStatus(e.target.value as TransactionStatus)}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
+ <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} required/></label><label>Valor<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00" required/></label><label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: Mercado"/></label>
+ {(type==="INCOME"||type==="EXPENSE")&&<label>Categoria<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Selecione</option>{activeCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+ <label>{type==="TRANSFER"?"Conta de origem":"Conta"}<select value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">Selecione</option>{activeAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+ {type==="TRANSFER"&&<label>Conta de destino<select value={destinationAccountId} onChange={e=>setDestinationAccountId(e.target.value)}><option value="">Selecione</option>{activeAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+ {type==="EXPENSE"&&<label>Cartão de crédito (opcional)<select value={creditCardId} onChange={e=>setCreditCardId(e.target.value)}><option value="">Nenhum / conta</option>{activeCards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+ {type==="CARD_PAYMENT"&&<label>Cartão<select value={creditCardId} onChange={e=>setCreditCardId(e.target.value)}><option value="">Selecione</option>{activeCards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+ {type!=="TRANSFER"&&<label>Pessoa (opcional)<select value={personId} onChange={e=>setPersonId(e.target.value)}><option value="">Nenhuma</option>{activePeople.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
+ </div><div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Registrar lançamento"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar edição</button>}</div><p className="form-note">Compra no cartão não reduz a conta. O pagamento da fatura movimenta a conta e não cria outra despesa.</p></section></div>;
+}
 
 function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=>Promise<void>}) {
   const [page,setPage]=useState<Page>("dashboard");
@@ -156,7 +182,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
   }
   const content = page==="dashboard" ? <Dashboard data={data}/> :
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
-    page==="transacoes" ? <Placeholder title="Transações" text="A tela será ligada às validações do motor antes de permitir qualquer lançamento."/> :
+    page==="transacoes" ? <Transactions data={data} onChange={persist}/> : :
     page==="cartoes" ? <Placeholder title="Cartões" text="Cartões, faturas e pagamentos serão conectados ao motor de cartão sem duplicar despesas."/> :
     <Placeholder title="Mais" text="Parcelamentos, recorrências, caixinhas, orçamentos, relatórios e assistente serão adicionados por etapas."/>;
   return <div className="shell">
