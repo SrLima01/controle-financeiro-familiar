@@ -17,6 +17,7 @@ import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets
 import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
 import type { Budget, Pot, RecurringFrequency, RecurringRule } from "../domain/types/entities";
 import { exportJson, exportTransactionsCsv, importJson } from "../infrastructure/persistence/export";
+import { analyzeFinances } from "../domain/assistant/assistant-engine";
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais" | "relatorios";
 const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [], budgets: [] };
@@ -405,9 +406,18 @@ function Settings({data,onChange,onSignOut}:{data:EntityCollection;onChange:(nex
  </div>;
 }
 
+function Assistant({data}:{data:EntityCollection}) {
+ const [month,setMonth]=useState(todayFinancialDate().slice(0,7));
+ const result=useMemo(()=>analyzeFinances(data,month),[data,month]);
+ return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Análise</span><h1>Assistente financeiro</h1></div><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></div>
+ <section className="panel"><p className="form-note">As análises abaixo são calculadas localmente a partir dos seus dados. Nenhuma alteração financeira é feita pelo assistente.</p></section>
+ <div className="insight-list">{result.insights.map((x,i)=><article className={`panel insight ${x.kind}`} key={i}><strong>{x.title}</strong><p>{x.detail}</p></article>)}</div>
+ </div>;
+}
+
 function More({data,onChange,onSignOut}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
- const [section,setSection]=useState<"pots"|"recurring"|"budgets"|"settings">("pots");
- return <>{<div className="subnav"><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
+ const [section,setSection]=useState<"pots"|"recurring"|"budgets"|"assistant"|"settings">("pots");
+ return <>{<div className="subnav"><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
