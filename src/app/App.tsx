@@ -641,6 +641,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
   const [data,setData]=useState<EntityCollection>(emptyData);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
+  const [conflict,setConflict]=useState<{local:EntityCollection;remote:EntityCollection;remoteVersion:number}|null>(null);
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
@@ -655,10 +656,24 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     return ()=>{cancelled=true};
   },[family.id]);
   async function persist(next:EntityCollection){
+    setError("");
     await repo.replaceAll(next); setData(next);
     const result=await pushFromLocalFirst(family.id,next,remoteVersion);
-    if(result.kind==="pushed"){setRemoteVersion(result.version);return;}
-    throw new Error("Os dados online foram alterados em outro aparelho. A alteração local foi preservada, mas não foi enviada.");
+    if(result.kind==="pushed"){setRemoteVersion(result.version);setConflict(null);return;}
+    const remote=await pullFinanceState(family.id);
+    if(remote){setConflict({local:next,remote:remote.state,remoteVersion:remote.version});setRemoteVersion(remote.version);}
+    throw new Error("Conflito de sincronização: outro aparelho alterou os dados online. Escolha abaixo qual estado deve prevalecer.");
+  }
+  async function keepRemote(){
+    if(!conflict)return;
+    await repo.replaceAll(conflict.remote); setData(conflict.remote); setRemoteVersion(conflict.remoteVersion); setConflict(null); setError("");
+  }
+  async function keepLocal(){
+    if(!conflict)return;
+    setError("");
+    const result=await pushFromLocalFirst(family.id,conflict.local,conflict.remoteVersion);
+    if(result.kind==="pushed"){setRemoteVersion(result.version);setConflict(null);setError("");return;}
+    setError("O estado online mudou novamente. Atualize a tela e resolva o novo conflito.");
   }
   const content = page==="dashboard" ? <Dashboard data={data}/> :
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
@@ -668,7 +683,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     <Placeholder title="Mais" text="Parcelamentos, recorrências, caixinhas, orçamentos, relatórios e assistente serão adicionados por etapas."/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></header>
-    {error && <div className="global-alert">{error}</div>}{loading ? <div className="loading">Carregando dados financeiros…</div> : content}
+    {error && <div className="global-alert">{error}</div>}{conflict && <section className="panel sync-conflict"><strong>Conflito de sincronização</strong><p>Os dados deste aparelho e os dados online são diferentes. Não fazemos mesclagem automática de informações financeiras.</p><div className="form-actions"><button className="secondary compact" onClick={()=>void keepRemote()}>Usar dados online</button><button className="primary compact" onClick={()=>void keepLocal()}>Manter meus dados</button></div></section>}{loading ? <div className="loading">Carregando dados financeiros…</div> : content}
     <nav className="bottom-nav">{([["dashboard","Início","⌂"],["contas","Contas","▣"],["transacoes","Lançamentos","＋"],["cartoes","Cartões","▤"],["relatorios","Relatórios","▥"],["mais","Mais","•••"]] as const).map(([key,label,icon])=><button className={page===key?"active":""} key={key} onClick={()=>setPage(key)} aria-current={page===key?"page":undefined} aria-label={label}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
   </div>;
 }
