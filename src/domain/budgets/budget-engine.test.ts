@@ -1,7 +1,8 @@
 import {describe,expect,it} from "vitest";
+import type { EntityCollection } from "../../infrastructure/persistence/repository";
 import {getBudgetSpent,getBudgetStatus} from "./budget-engine";
 const budget={id:"b",month:"2026-09",categoryId:"c",limitCents:100000,active:true};
-const data={people:[],categories:[],accounts:[],cards:[],transactions:[
+const data: EntityCollection = {people:[],categories:[],accounts:[],cards:[],transactions:[
 {id:"1",date:"2026-09-10",type:"EXPENSE",status:"PAID",amountCents:70000,description:"Mercado",categoryId:"c"},
 {id:"2",date:"2026-09-20",type:"EXPENSE",status:"PENDING",amountCents:15000,description:"Cartão",categoryId:"c",creditCardId:"card"},
 {id:"3",date:"2026-08-20",type:"EXPENSE",status:"PAID",amountCents:90000,description:"Fora do mês",categoryId:"c"},
