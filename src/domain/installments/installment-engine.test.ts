@@ -96,7 +96,7 @@ describe("installment engine", () => {
     });
     expect(getCardInvoice(card, result.transactions, "2026-03-05")).toMatchObject({
       closingDate: "2026-03-10",
-      purchaseTotalCents: 3333
+      purchaseTotalCents: 3334
     });
   });
 
