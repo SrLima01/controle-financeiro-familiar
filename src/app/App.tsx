@@ -232,7 +232,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    })}</section>
    <section className="panel form-panel"><h2>{editing?"Editar lançamento":"Novo lançamento"}</h2><div className="form-grid">
      <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as TransactionType;setType(v);setCategoryId("");setCreditCardId("");if(v!=="EXPENSE")setParcelado(false)}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
-     <label>Status<select value={status} onChange={e=>setStatus(e.target.value as RecurringRule["status"])}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}{status==="CANCELLED"&&<option value="CANCELLED">Cancelado</option>}</select></label>
+     <label>Status<select value={status} onChange={e=>setStatus(e.target.value as RecurringRule["status"])}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
      <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} required/></label>
      <label>Valor total<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00" required/></label>
      <label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: Mercado"/></label>
@@ -260,7 +260,7 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
  const [endDate,setEndDate]=useState("");
  const [amount,setAmount]=useState("");
  const [type,setType]=useState<"INCOME"|"EXPENSE">("EXPENSE");
- const [status,setStatus]=useState<RecurringRule["status"]>("PLANNED");
+ const [status,setStatus]=useState<"PENDING"|"PAID"|"RECEIVED"|"PLANNED">("PLANNED");
  const [accountId,setAccountId]=useState("");
  const [creditCardId,setCreditCardId]=useState("");
  const [categoryId,setCategoryId]=useState("");
@@ -270,7 +270,7 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
  const activeCategories=data.categories.filter(c=>c.active&&c.kind===type);
  function reset(){setEditing(null);setDescription("");setFrequency("MONTHLY");setStartDate(todayFinancialDate());setEndDate("");setAmount("");setType("EXPENSE");setStatus("PLANNED");setAccountId("");setCreditCardId("");setCategoryId("");setPersonId("");setError("")}
  function edit(rule:RecurringRule){
-   setEditing(rule);setDescription(rule.description);setFrequency(rule.frequency);setStartDate(rule.startDate);setEndDate(rule.endDate??"");setAmount((rule.amountCents/100).toFixed(2).replace(".",","));setType(rule.type);setStatus(rule.status==="CANCELLED" ? (rule.type==="INCOME" ? "RECEIVED" : "PAID") : rule.status);setAccountId(rule.accountId??"");setCreditCardId(rule.creditCardId??"");setCategoryId(rule.categoryId??"");setPersonId(rule.personId??"");setError("");
+   setEditing(rule);setDescription(rule.description);setFrequency(rule.frequency);setStartDate(rule.startDate);setEndDate(rule.endDate??"");setAmount((rule.amountCents/100).toFixed(2).replace(".",","));setType(rule.type);setStatus(rule.status);setAccountId(rule.accountId??"");setCreditCardId(rule.creditCardId??"");setCategoryId(rule.categoryId??"");setPersonId(rule.personId??"");setError("");
  }
  async function save(){
    setError("");
@@ -311,7 +311,7 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
     <label>Data inicial<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
     <label>Data final (opcional)<input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}/></label>
     <label>Valor<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00"/></label>
-    <label>Status<select value={status} onChange={e=>setStatus(e.target.value as TransactionStatus)}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
+    <label>Status<select value={status} onChange={e=>{const v=e.target.value;if(v==="PENDING"||v==="PAID"||v==="RECEIVED"||v==="PLANNED")setStatus(v)}}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
     <label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: Aluguel"/></label>
     {activeCategories.length>0&&<label>Categoria<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Nenhuma</option>{activeCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
     <label>Conta<select value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCreditCardId("")}}><option value="">Nenhuma</option>{activeAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
