@@ -421,6 +421,21 @@ function SmartInput({data,onChange}:{data:EntityCollection;onChange:(next:Entity
  const [draft,setDraft]=useState<SmartDraft|null>(null);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
+ const [listening,setListening]=useState(false);
+ const recognitionRef=useState<{current:any}>(()=>({current:null}))[0];
+ function startVoice(){
+   setError("");
+   const SpeechRecognition=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
+   if(!SpeechRecognition){setError("Seu navegador não oferece reconhecimento de voz nesta versão. Você pode digitar normalmente.");return;}
+   const recognition=new SpeechRecognition();
+   recognition.lang="pt-BR"; recognition.interimResults=true; recognition.continuous=false;
+   recognition.onstart=()=>setListening(true);
+   recognition.onresult=(event:any)=>{let value="";for(let i=event.resultIndex;i<event.results.length;i++)value+=event.results[i][0].transcript;setText(value)};
+   recognition.onerror=()=>{setListening(false);setError("Não foi possível reconhecer a fala. Tente novamente ou digite o lançamento.");};
+   recognition.onend=()=>{setListening(false);recognitionRef.current=null};
+   recognitionRef.current=recognition;recognition.start();
+ }
+ function stopVoice(){recognitionRef.current?.stop();setListening(false)}
  function interpret(){
    setError("");
    try{ setDraft(parseSmartInput(text,{categories:data.categories,accounts:data.accounts,cards:data.cards})); }
@@ -454,6 +469,7 @@ function SmartInput({data,onChange}:{data:EntityCollection;onChange:(next:Entity
    <section className="panel form-panel">
      <p className="muted">Digite como você falaria normalmente. Nada é salvo até você revisar e confirmar.</p>
      <label>O que aconteceu?<textarea value={text} onChange={e=>setText(e.target.value)} rows={4} placeholder='Ex.: "Paguei 150 no mercado ontem"'/></label>
+     <div className="voice-actions"><button className={listening?"secondary":"primary"} type="button" onClick={listening?stopVoice:startVoice}>{listening?"Parar gravação":"Falar lançamento"}</button><span className="form-note">{listening?"Ouvindo em português… fale naturalmente.": "A fala vira texto e passa pela mesma revisão da entrada digitada."}</span></div>
      {error&&<div className="global-alert">{error}</div>}
      <div className="form-actions"><button className="primary" disabled={!text.trim()||busy} onClick={interpret}>Interpretar</button>{draft&&<button className="secondary" onClick={()=>{setDraft(null);setError("")}}>Descartar</button>}</div>
    </section>
