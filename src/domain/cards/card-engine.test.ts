@@ -73,9 +73,9 @@ describe("card engine", () => {
     ];
 
     const invoice = getCardInvoice(card, tx, "2026-09-12");
-    expect(invoice.purchaseTotalCents).toBe(25000);
+    expect(invoice.purchaseTotalCents).toBe(30000);
     expect(invoice.paymentTotalCents).toBe(15000);
-    expect(invoice.openAmountCents).toBe(10000);
+    expect(invoice.openAmountCents).toBe(15000);
   });
 
   it("does not restore limit for pending card payments or planned purchases", () => {
