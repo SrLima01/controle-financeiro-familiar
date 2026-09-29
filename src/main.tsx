@@ -18,7 +18,7 @@ const id=()=>crypto.randomUUID();
 type Page="dashboard"|"contas"|"lancamentos"|"cartoes";
 const nav:[Page,string,string][]=[["dashboard","Início","⌂"],["contas","Contas","▣"],["lancamentos","Lançamentos","＋"],["cartoes","Cartões","▤"]];
 
-async function load():Promise<EntityCollection>{const [people,categories,accounts,cards,transactions,installmentGroups]=await Promise.all(["people","categories","accounts","cards","transactions","installmentGroups"].map(x=>repo.list(x as keyof EntityCollection)));return{people,categories,accounts,cards,transactions,installmentGroups};}
+async function load():Promise<EntityCollection>{const [people,categories,accounts,cards,transactions,installmentGroups]=await Promise.all([repo.list("people"),repo.list("categories"),repo.list("accounts"),repo.list("cards"),repo.list("transactions"),repo.list("installmentGroups")]);return{people,categories,accounts,cards,transactions,installmentGroups};}
 
 function App(){
  const [ready,setReady]=useState(false),[user,setUser]=useState<string|null>(null),[data,setData]=useState<EntityCollection>(emptyEntityCollection()),[page,setPage]=useState<Page>("dashboard"),[family,setFamily]=useState(localStorage.getItem("cff_family_id")),[version,setVersion]=useState(Number(localStorage.getItem("cff_remote_version")||0)),[syncing,setSyncing]=useState(false),[notice,setNotice]=useState("");
