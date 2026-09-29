@@ -641,6 +641,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
   const [conflict,setConflict]=useState<{local:EntityCollection;remote:EntityCollection;remoteVersion:number}|null>(null);
+  const [remoteVersion,setRemoteVersion]=useState(0);
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
