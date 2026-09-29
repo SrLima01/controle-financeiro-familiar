@@ -140,6 +140,20 @@ describe("card engine", () => {
     });
   });
 
+  it("applies a payment made before closing to an already-realized purchase", () => {
+    const transactions = [
+      makeCardTransaction(card.id, "purchase-1", "2026-09-05", "EXPENSE", 5000),
+      makeCardTransaction(card.id, "payment-1", "2026-09-08", "CARD_PAYMENT", 2000),
+    ];
+
+    expect(getCardInvoice(card, transactions, "2026-09-10")).toMatchObject({
+      purchaseTotalCents: 5000,
+      paymentTotalCents: 2000,
+      openAmountCents: 3000,
+    });
+    expect(calculateCardOutstanding(card, transactions)).toBe(3000);
+  });
+
   it("allows a late payment to settle an already-realized older invoice", () => {
     const transactions = [
       makeCardTransaction(card.id, "purchase-1", "2026-09-05", "EXPENSE", 5000),
