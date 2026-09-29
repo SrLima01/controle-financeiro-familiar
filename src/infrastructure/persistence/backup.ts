@@ -1,5 +1,5 @@
 import type { EntityCollection, EntityMap } from "./repository";
-import type { Account, CreditCard, Transaction } from "../../domain/types/entities";
+import type { Account, CreditCard, RecurringRule, Transaction } from "../../domain/types/entities";
 import { validateAllTransactions } from "../../domain/transactions/financial-engine";
 
 export const BACKUP_SCHEMA_VERSION = 1;
@@ -17,7 +17,8 @@ const COLLECTIONS: (keyof EntityMap)[] = [
   "accounts",
   "cards",
   "transactions",
-  "installmentGroups"
+  "installmentGroups",
+  "recurringRules"
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -127,6 +128,24 @@ export function validateBackup(input: unknown): FinanceBackup {
     }
   }
 
+  for (const rule of data.recurringRules as RecurringRule[]) {
+    if (
+      typeof rule.description !== "string" ||
+      !Number.isSafeInteger(rule.amountCents) ||
+      rule.amountCents < 0 ||
+      !["INCOME", "EXPENSE"].includes(rule.type) ||
+      !["PENDING", "PAID", "RECEIVED", "PLANNED"].includes(rule.status) ||
+      !["WEEKLY", "BIWEEKLY", "MONTHLY", "BIMONTHLY", "QUARTERLY", "SEMIANNUAL", "ANNUAL"].includes(rule.frequency) ||
+      typeof rule.startDate !== "string" ||
+      !Array.isArray(rule.transactionIds) ||
+      typeof rule.active !== "boolean"
+    ) throw new Error("Invalid recurring rule " + rule.id);
+    if (rule.accountId && !accountIds.has(rule.accountId)) throw new Error("Recurring rule references an unknown account");
+    if (rule.creditCardId && !cardIds.has(rule.creditCardId)) throw new Error("Recurring rule references an unknown card");
+    if (rule.categoryId && !categoryIds.has(rule.categoryId)) throw new Error("Recurring rule references an unknown category");
+    if (rule.personId && !personIds.has(rule.personId)) throw new Error("Recurring rule references an unknown person");
+  }
+
   for (const tx of data.transactions as Transaction[]) {
     if (
       typeof tx.description !== "string" ||
@@ -214,6 +233,7 @@ export function emptyEntityCollection(): EntityCollection {
     accounts: [],
     cards: [],
     transactions: [],
-    installmentGroups: []
+    installmentGroups: [],
+    recurringRules: []
   };
 }
