@@ -24,9 +24,8 @@ export function createRecurringRule(input:RecurringRuleInput):RecurringRule{
   assertNonNegativeCents(input.amountCents,"amountCents");
   if(input.endDate && input.endDate<input.startDate) throw new Error("endDate must not precede startDate");
   if(!input.description.trim()) throw new Error("Informe uma descrição.");
-  if(!input.accountId) throw new Error("Lançamento recorrente precisa de uma conta.");
-  if(input.type==="INCOME" && input.creditCardId) throw new Error("Entrada recorrente não pode usar cartão.");
-  if(input.type==="EXPENSE" && input.accountId && input.creditCardId) throw new Error("Use conta ou cartão, não ambos.");
+  if(input.type==="INCOME" && (!input.accountId || input.creditCardId)) throw new Error("Entrada recorrente precisa de uma conta e não pode usar cartão.");
+  if(input.type==="EXPENSE" && (!!input.accountId === !!input.creditCardId)) throw new Error("Despesa recorrente deve usar exatamente uma conta ou um cartão.");
   return {...input,id:crypto.randomUUID(),description:input.description.trim(),transactionIds:[]};
 }
 
