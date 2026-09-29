@@ -28,3 +28,5 @@ export type RecurringRule={
 export type PotMovementType="DEPOSIT"|"WITHDRAWAL";
 export type Pot={id:Id;name:string;targetCents:number;active:boolean};
 export type PotMovement={id:Id;potId:Id;type:PotMovementType;amountCents:number;date:string;description:string};
+
+export type Budget={id:Id;month:string;categoryId:Id;limitCents:number;active:boolean};
