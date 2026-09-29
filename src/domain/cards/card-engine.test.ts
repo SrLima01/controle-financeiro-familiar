@@ -72,7 +72,7 @@ describe("card engine", () => {
       },
     ];
 
-    const invoice = getCardInvoice(card, tx, "2026-10-12");
+    const invoice = getCardInvoice(card, tx, "2026-10-10");
     expect(invoice.purchaseTotalCents).toBe(30000);
     expect(invoice.paymentTotalCents).toBe(15000);
     expect(invoice.openAmountCents).toBe(15000);
