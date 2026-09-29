@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "./installment-engine";
+import type { EntityCollection } from "../../infrastructure/persistence/repository";
 
 const base = {
   totalAmountCents: 10001,
@@ -25,7 +26,7 @@ describe("installment engine", () => {
 
   it("cancels only the selected installment", () => {
     const created = buildInstallmentSet(base);
-    const data = { people: [], categories: [], accounts: [{ id: "account-1", name: "Conta", type: "CHECKING" as const, openingBalanceCents: 0, active: true }], cards: [], transactions: created.transactions, installmentGroups: [created.group] };
+    const data: EntityCollection = { people: [], categories: [], accounts: [{ id: "account-1", name: "Conta", type: "CHECKING" as const, openingBalanceCents: 0, active: true }], cards: [], transactions: created.transactions, installmentGroups: [created.group] };
     const next = cancelInstallments(data, created.group.id, created.transactions[1].id, "ONE");
     expect(next.transactions.map(t => t.status)).toEqual(["PLANNED", "CANCELLED", "PLANNED"]);
   });
