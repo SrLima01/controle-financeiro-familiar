@@ -1,0 +1,144 @@
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import type { EntityCollection } from "../infrastructure/persistence/repository";
+import { IndexedDbFinanceRepository } from "../infrastructure/persistence/indexeddb";
+import { calculateProjectedAccountBalance, calculateTotalRealBalance } from "../domain/transactions/financial-engine";
+import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
+import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
+import { pullFinanceState } from "../infrastructure/supabase/sync";
+
+type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais";
+const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [] };
+const repo = new IndexedDbFinanceRepository();
+
+function money(cents:number) {
+  return new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(cents / 100);
+}
+
+function todayMonth() {
+  const d = new Date();
+  return d.toLocaleDateString("pt-BR", { month:"long", year:"numeric" });
+}
+
+function AuthScreen({ onAuthenticated }:{onAuthenticated:(user:User)=>void}) {
+  const [mode,setMode] = useState<"login"|"signup">("login");
+  const [email,setEmail] = useState("");
+  const [password,setPassword] = useState("");
+  const [busy,setBusy] = useState(false);
+  const [error,setError] = useState("");
+  async function submit(e:FormEvent) {
+    e.preventDefault(); setBusy(true); setError("");
+    try {
+      const result = mode==="login" ? await signInWithEmail(email,password) : await signUpWithEmail(email,password);
+      if (result.user) onAuthenticated(result.user);
+      else setError("Cadastro realizado. Confirme o e-mail antes de entrar.");
+    } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível concluir."); }
+    finally { setBusy(false); }
+  }
+  return <main className="auth-page"><section className="panel auth-panel">
+    <div className="brand-mark">CF</div><h1>Controle Financeiro Familiar</h1>
+    <p className="muted">Suas finanças, com histórico e sincronização familiar.</p>
+    <form onSubmit={submit} className="form-stack">
+      <label>E-mail<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email"/></label>
+      <label>Senha<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} autoComplete={mode==="login"?"current-password":"new-password"}/></label>
+      {error && <div className="alert error">{error}</div>}
+      <button className="primary" disabled={busy}>{busy ? "Aguarde…" : mode==="login" ? "Entrar" : "Criar conta"}</button>
+    </form>
+    <button className="link-button" onClick={()=>{setMode(mode==="login"?"signup":"login");setError("")}}>
+      {mode==="login" ? "Ainda não tenho conta" : "Já tenho uma conta"}
+    </button>
+  </section></main>;
+}
+
+function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void}) {
+  const [families,setFamilies]=useState<Family[]>([]);
+  const [name,setName]=useState("");
+  const [code,setCode]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  useEffect(()=>{ listMyFamilies().then(setFamilies).catch(e=>setError(e instanceof Error?e.message:"Não foi possível carregar as famílias.")); },[]);
+  async function create() {
+    if (!name.trim()) return;
+    setBusy(true);setError("");
+    try { const id=await createFamily(name.trim()); const family={id,name:name.trim(),invite_code:"",created_by:user.id,created_at:new Date().toISOString()}; onReady(family); } catch(e){setError(e instanceof Error?e.message:"Não foi possível criar.");} finally{setBusy(false);}
+  }
+  async function join() {
+    if (!code.trim()) return;
+    setBusy(true);setError("");
+    try { const id=await joinFamily(code.trim().toUpperCase()); const found=(await listMyFamilies()).find(f=>f.id===id); if(found) onReady(found); else setError("Família vinculada, mas não foi possível carregar seus dados."); } catch(e){setError(e instanceof Error?e.message:"Não foi possível entrar.");} finally{setBusy(false);}
+  }
+  return <main className="auth-page"><section className="panel family-panel">
+    <h1>Escolha sua família</h1><p className="muted">A família define o conjunto financeiro que será sincronizado entre os aparelhos.</p>
+    {families.length>0 && <div className="family-list">{families.map(f=><button key={f.id} className="family-card" onClick={()=>onReady(f)}><strong>{f.name}</strong><span>Família sincronizada</span></button>)}</div>}
+    <div className="split-line"><span>ou</span></div>
+    <h2>Criar nova família</h2><div className="inline-form"><input placeholder="Ex.: Nossa casa" value={name} onChange={e=>setName(e.target.value)}/><button className="primary" disabled={busy} onClick={create}>Criar</button></div>
+    <h2>Entrar com código</h2><div className="inline-form"><input placeholder="Código de convite" value={code} onChange={e=>setCode(e.target.value)}/><button className="secondary" disabled={busy} onClick={join}>Entrar</button></div>
+    {error && <div className="alert error">{error}</div>}
+  </section></main>;
+}
+
+function Dashboard({data}:{data:EntityCollection}) {
+  const real=useMemo(()=>calculateTotalRealBalance({accounts:data.accounts,cards:data.cards,transactions:data.transactions}),[data]);
+  const projected=useMemo(()=>data.accounts.filter(a=>a.active).reduce((s,a)=>s+calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}),0),[data]);
+  const pending=data.transactions.filter(t=>t.status==="PENDING"||t.status==="PLANNED").reduce((s,t)=>s+(t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0);
+  return <div className="page-content">
+    <div className="page-heading"><div><span className="eyebrow">{todayMonth()}</span><h1>Visão geral</h1></div><span className="sync-dot">Local</span></div>
+    <section className="hero-card"><span>Saldo total real</span><strong>{money(real)}</strong><small>Somente movimentos pagos/recebidos.</small></section>
+    <div className="metric-grid"><article className="metric"><span>Projetado</span><strong>{money(projected)}</strong><small>Considera lançamentos futuros.</small></article><article className="metric"><span>Movimentos pendentes</span><strong>{money(pending)}</strong><small>Impacto ainda não realizado.</small></article></div>
+    <section className="panel"><div className="section-title"><h2>Contas</h2><span>{data.accounts.filter(a=>a.active).length} ativas</span></div>
+      {data.accounts.filter(a=>a.active).length===0 ? <Empty text="Nenhuma conta cadastrada ainda."/> : <div className="account-list">{data.accounts.filter(a=>a.active).map(a=><div className="account-row" key={a.id}><div><strong>{a.name}</strong><span>{a.type}</span></div><strong>{money(calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}))}</strong></div>)}</div>}
+    </section>
+  </div>;
+}
+
+function Empty({text}:{text:string}) { return <div className="empty">{text}</div>; }
+
+function Placeholder({title,text}:{title:string;text:string}) { return <div className="page-content"><div className="page-heading"><h1>{title}</h1></div><section className="panel"><Empty text={text}/></section></div>; }
+
+function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=>Promise<void>}) {
+  const [page,setPage]=useState<Page>("dashboard");
+  const [data,setData]=useState<EntityCollection>(emptyData);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      try {
+        const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups")};
+        if(!cancelled)setData(local);
+        const remote=await pullFinanceState(family.id);
+        if(remote && !cancelled){ await repo.replaceAll(remote.state); setData(remote.state); }
+      } catch(e){ if(!cancelled)setError(e instanceof Error?e.message:"Falha ao carregar dados."); }
+      finally{if(!cancelled)setLoading(false);}
+    })();
+    return ()=>{cancelled=true};
+  },[family.id]);
+  const content = page==="dashboard" ? <Dashboard data={data}/> :
+    page==="contas" ? <Placeholder title="Contas" text="A estrutura de contas está pronta. O próximo incremento liga cadastro, edição e arquivamento ao repositório e ao motor financeiro."/> :
+    page==="transacoes" ? <Placeholder title="Transações" text="A tela será ligada às validações do motor antes de permitir qualquer lançamento."/> :
+    page==="cartoes" ? <Placeholder title="Cartões" text="Cartões, faturas e pagamentos serão conectados ao motor de cartão sem duplicar despesas."/> :
+    <Placeholder title="Mais" text="Parcelamentos, recorrências, caixinhas, orçamentos, relatórios e assistente serão adicionados por etapas."/>;
+  return <div className="shell">
+    <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></header>
+    {error && <div className="global-alert">{error}</div>}{loading ? <div className="loading">Carregando dados financeiros…</div> : content}
+    <nav className="bottom-nav">{([["dashboard","Início","⌂"],["contas","Contas","▣"],["transacoes","Lançamentos","＋"],["cartoes","Cartões","▤"],["mais","Mais","•••"]] as const).map(([key,label,icon])=><button className={page===key?"active":""} key={key} onClick={()=>setPage(key)}><span>{icon}</span><small>{label}</small></button>)}</nav>
+  </div>;
+}
+
+export default function App() {
+  const [user,setUser]=useState<User|null>(null);
+  const [family,setFamily]=useState<Family|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  useEffect(()=>{
+    let alive=true;
+    getAuthState().then(s=>{if(alive){setUser(s.user);setLoading(false)}}).catch(e=>{if(alive){setError(e instanceof Error?e.message:"Supabase não configurado.");setLoading(false)}});
+    const subscription=onAuthStateChange(s=>{if(alive)setUser(s.user)});
+    return ()=>{alive=false;subscription.data.subscription.unsubscribe()};
+  },[]);
+  if(loading)return <div className="loading full">Carregando…</div>;
+  if(error && !user)return <main className="auth-page"><section className="panel"><h1>Configuração necessária</h1><div className="alert error">{error}</div><p className="muted">Defina as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no ambiente do aplicativo.</p></section></main>;
+  if(!user)return <AuthScreen onAuthenticated={setUser}/>;
+  if(!family)return <FamilyScreen user={user} onReady={setFamily}/>;
+  return <AppShell user={user} family={family} onSignOut={async()=>{await signOut();setFamily(null);setUser(null)}}/>;
+}
