@@ -40,6 +40,19 @@ export type CardInvoice = {
   openAmountCents: number;
 };
 
+type InvoiceBucket = {
+  closingDate: string;
+  dueDate: string;
+  purchaseTotalCents: number;
+  paymentTotalCents: number;
+};
+
+export type CardPaymentAllocation = {
+  transactionId: string;
+  amountCents: number;
+  closingDate: string;
+};
+
 function dateParts(date: string) {
   assertFinancialDate(date);
   const [y, m, d] = date.split("-").map(Number);
@@ -87,31 +100,84 @@ export function invoiceDueDateFromClosing(
   return iso(targetY, targetM, dueDay);
 }
 
+export function allocateCardPayments(
+  card: CreditCard,
+  transactions: readonly Transaction[],
+): CardPaymentAllocation[] {
+  const buckets = new Map<string, InvoiceBucket>();
+
+  for (const tx of transactions) {
+    if (tx.status !== "PAID" || tx.creditCardId !== card.id || tx.type !== "EXPENSE") continue;
+    const closingDate = invoiceClosingDate(tx.date, card.closingDay);
+    const existing = buckets.get(closingDate);
+    if (existing) {
+      existing.purchaseTotalCents += tx.amountCents;
+    } else {
+      buckets.set(closingDate, {
+        closingDate,
+        dueDate: invoiceDueDateFromClosing(closingDate, card.closingDay, card.dueDay),
+        purchaseTotalCents: tx.amountCents,
+        paymentTotalCents: 0,
+      });
+    }
+  }
+
+  const invoices = [...buckets.values()].sort((a, b) => a.closingDate.localeCompare(b.closingDate));
+  const payments = transactions
+    .filter(tx => tx.status === "PAID" && tx.creditCardId === card.id && tx.type === "CARD_PAYMENT")
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+
+  const allocations: CardPaymentAllocation[] = [];
+  for (const payment of payments) {
+    let remaining = payment.amountCents;
+    for (const invoice of invoices) {
+      if (remaining <= 0) break;
+      if (invoice.closingDate > payment.date) continue;
+      const open = invoice.purchaseTotalCents - invoice.paymentTotalCents;
+      if (open <= 0) continue;
+      const applied = Math.min(remaining, open);
+      invoice.paymentTotalCents += applied;
+      remaining -= applied;
+      allocations.push({
+        transactionId: payment.id,
+        amountCents: applied,
+        closingDate: invoice.closingDate,
+      });
+    }
+  }
+
+  return allocations;
+}
+
 export function getCardInvoice(
   card: CreditCard,
   transactions: readonly Transaction[],
   referenceDate: string,
 ): CardInvoice {
   const closing = invoiceClosingDate(referenceDate, card.closingDay);
-  const previousClose = previousMonthDate(closing, card.closingDay);
   const due = invoiceDueDateFromClosing(closing, card.closingDay, card.dueDay);
+  const previousClose = previousMonthDate(closing, card.closingDay);
 
   let purchases = 0;
-  let payments = 0;
-
   for (const tx of transactions) {
-    if (tx.status === "CANCELLED" || tx.creditCardId !== card.id) continue;
-    if (tx.type === "EXPENSE" && tx.status !== "PLANNED" && tx.date > previousClose && tx.date <= closing) {
+    if (
+      tx.status === "PAID" &&
+      tx.creditCardId === card.id &&
+      tx.type === "EXPENSE" &&
+      tx.date > previousClose &&
+      tx.date <= closing
+    ) {
       purchases += tx.amountCents;
-    }
-    if (tx.type === "CARD_PAYMENT" && tx.status === "PAID" && tx.date >= closing && tx.date <= due) {
-      payments += tx.amountCents;
     }
   }
 
-  const open = Math.max(0, purchases - payments);
+  const allocations = allocateCardPayments(card, transactions)
+    .filter(allocation => allocation.closingDate === closing)
+    .reduce((sum, allocation) => sum + allocation.amountCents, 0);
+
+  const open = Math.max(0, purchases - allocations);
   assertCents(purchases);
-  assertCents(payments);
+  assertCents(allocations);
   assertCents(open);
 
   return {
@@ -119,7 +185,7 @@ export function getCardInvoice(
     closingDate: closing,
     dueDate: due,
     purchaseTotalCents: purchases,
-    paymentTotalCents: payments,
+    paymentTotalCents: allocations,
     openAmountCents: open,
   };
 }
