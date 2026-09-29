@@ -19,6 +19,7 @@ import type { Budget, Pot, RecurringFrequency, RecurringRule } from "../domain/t
 import { exportJson, exportTransactionsCsv, importJson } from "../infrastructure/persistence/export";
 import { analyzeFinances } from "../domain/assistant/assistant-engine";
 import { parseSmartAmount, parseSmartInput, type SmartDraft } from "../domain/smart-input/smart-parser";
+import { extractReceiptDate, extractReceiptMerchant, extractReceiptTotal, recognizeReceipt } from "../infrastructure/ocr/receipt-ocr";
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais" | "relatorios";
 const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [], budgets: [] };
@@ -475,9 +476,69 @@ function SmartInput({data,onChange}:{data:EntityCollection;onChange:(next:Entity
  </div>;
 }
 
+function ReceiptScanner({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+ const [text,setText]=useState("");
+ const [draft,setDraft]=useState<SmartDraft|null>(null);
+ const [confidence,setConfidence]=useState<number|null>(null);
+ const [progress,setProgress]=useState(0);
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
+ const categories=data.categories.filter(c=>c.active&&c.kind==="EXPENSE");
+ async function scan(file:File){
+   setBusy(true);setError("");setDraft(null);setText("");setConfidence(null);setProgress(0);
+   try{
+     const result=await recognizeReceipt(file,setProgress);
+     setText(result.text);setConfidence(result.confidence);
+     const total=extractReceiptTotal(result.text), date=extractReceiptDate(result.text), merchant=extractReceiptMerchant(result.text);
+     if(total===null)throw new Error("Não identifiquei o valor total com segurança. Revise o texto ou use Entrada inteligente.");
+     const d:SmartDraft={type:"EXPENSE",amountCents:total,date:date??todayFinancialDate(),description:merchant||"Compra no recibo",confidence:result.confidence>=80?"HIGH":result.confidence>=55?"MEDIUM":"LOW",warnings:[],needsReview:true};
+     if(!date)d.warnings.push("Data não identificada; confira a data.");
+     if(!merchant)d.warnings.push("Estabelecimento não identificado; confira a descrição.");
+     d.warnings.push("OCR pode conter erros. Revise todos os campos antes de confirmar.");
+     setDraft(d);
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível ler o recibo.");}
+   finally{setBusy(false)}
+ }
+ function update<K extends keyof SmartDraft>(key:K,value:SmartDraft[K]){setDraft(d=>d?{...d,[key]:value}:d)}
+ async function confirm(){
+   if(!draft)return;
+   const validCategory=!!draft.categoryId, source=!!draft.accountId!==!!draft.creditCardId;
+   if(!validCategory||!source){setError("Selecione uma categoria e exatamente uma conta ou cartão.");return}
+   try{
+     const tx:Transaction={id:crypto.randomUUID(),date:draft.date,type:"EXPENSE",status:"PAID",amountCents:draft.amountCents,description:draft.description.trim(),categoryId:draft.categoryId, ...(draft.accountId?{accountId:draft.accountId}:{}),...(draft.creditCardId?{creditCardId:draft.creditCardId}:{})};
+     validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});
+     setBusy(true);await onChange({...data,transactions:[...data.transactions,tx]});setDraft(null);setText("");
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível confirmar.");}finally{setBusy(false)}
+ }
+ return <div className="page-content">
+  <div className="page-heading"><div><span className="eyebrow">OCR local</span><h1>Ler recibo</h1></div></div>
+  <section className="panel form-panel">
+   <p className="muted">Fotografe o recibo. A leitura é feita no dispositivo e o resultado fica apenas como rascunho até sua confirmação.</p>
+   <label className="file-capture">Tirar foto ou escolher recibo<input type="file" accept="image/*" capture="environment" disabled={busy} onChange={e=>{const file=e.target.files?.[0];if(file)void scan(file)}}/></label>
+   {busy&&<p className="form-note">Lendo recibo… {Math.round(progress*100)}%</p>}
+   {confidence!==null&&<p className="form-note">Confiança média do OCR: {Math.round(confidence)}%. Isso não significa que os campos financeiros estejam corretos.</p>}
+   {error&&<div className="global-alert">{error}</div>}
+  </section>
+  {draft&&<section className="panel form-panel">
+   <div className="smart-review-head"><div><span className="eyebrow">Revisão obrigatória</span><h2>Confira o recibo</h2></div><span className="smart-confidence medium">OCR</span></div>
+   <div className="form-grid">
+    <label>Valor<input inputMode="decimal" value={(draft.amountCents/100).toFixed(2).replace(".",",")} onChange={e=>{const c=parseSmartAmount(e.target.value);if(c!==null)update("amountCents",c)}}/></label>
+    <label>Data<input type="date" value={draft.date} onChange={e=>update("date",e.target.value)}/></label>
+    <label>Estabelecimento<input value={draft.description} onChange={e=>update("description",e.target.value)}/></label>
+    <label>Categoria<select value={draft.categoryId??""} onChange={e=>update("categoryId",e.target.value||undefined)}><option value="">Selecione</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+    <label>Conta<select value={draft.accountId??""} onChange={e=>{update("accountId",e.target.value||undefined);if(e.target.value)update("creditCardId",undefined)}}><option value="">Nenhuma</option>{data.accounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+    <label>Cartão<select value={draft.creditCardId??""} onChange={e=>{update("creditCardId",e.target.value||undefined);if(e.target.value)update("accountId",undefined)}}><option value="">Nenhum</option>{data.cards.filter(c=>c.active).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+   </div>
+   {draft.warnings.length>0&&<div className="alert error"><ul>{draft.warnings.map(w=><li key={w}>{w}</li>)}</ul></div>}
+   <details><summary>Texto bruto do OCR</summary><pre className="ocr-text">{text||"Nenhum texto."}</pre></details>
+   <div className="form-actions"><button className="primary" disabled={busy||!draft.categoryId||(!draft.accountId&&!draft.creditCardId)} onClick={()=>void confirm()}>Confirmar lançamento</button><button className="secondary" onClick={()=>setDraft(null)}>Descartar</button></div>
+  </section>}
+ </div>;
+}
+
 function More({data,onChange,onSignOut}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
- const [section,setSection]=useState<"smart"|"pots"|"recurring"|"budgets"|"assistant"|"settings">("smart");
- return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
+ const [section,setSection]=useState<"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"settings">("smart");
+ return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="receipt"?"active":""} onClick={()=>setSection("receipt")}>Ler recibo</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
