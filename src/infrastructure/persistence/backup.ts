@@ -246,6 +246,8 @@ export function validateBackup(input: unknown): FinanceBackup {
     }
   }
 
+  validateAllTransactions({ accounts: data.accounts, cards: data.cards, transactions: data.transactions, categories: data.categories, people: data.people });
+
   return input as FinanceBackup;
 }
 
