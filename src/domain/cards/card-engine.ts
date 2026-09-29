@@ -11,6 +11,26 @@ export function validateCreditCard(card: CreditCard, accountIds: readonly string
   if (!Number.isInteger(card.dueDay) || card.dueDay < 1 || card.dueDay > 31) throw new Error("Invalid due day");
 }
 
+export function validateCreditCardUpdate(
+  previous: CreditCard,
+  next: CreditCard,
+  accountIds: readonly string[],
+  transactions: readonly Transaction[],
+): void {
+  validateCreditCard(next, accountIds);
+  if (previous.id !== next.id) throw new Error("Cartão inválido para edição");
+  const hasHistory = transactions.some(tx => tx.creditCardId === previous.id && tx.status !== "CANCELLED");
+  if (hasHistory && previous.accountId !== next.accountId) {
+    throw new Error("A conta de pagamento não pode ser alterada após haver movimentações no cartão.");
+  }
+  if (hasHistory && previous.closingDay !== next.closingDay) {
+    throw new Error("O dia de fechamento não pode ser alterado após haver movimentações no cartão.");
+  }
+  if (hasHistory && previous.dueDay !== next.dueDay) {
+    throw new Error("O dia de vencimento não pode ser alterado após haver movimentações no cartão.");
+  }
+}
+
 export type CardInvoice = {
   cardId: string;
   closingDate: string;
