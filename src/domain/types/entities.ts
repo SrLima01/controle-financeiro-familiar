@@ -25,3 +25,6 @@ export type RecurringRule={
   transactionIds:Id[];
   active:boolean;
 };
+export type PotMovementType="DEPOSIT"|"WITHDRAWAL";
+export type Pot={id:Id;name:string;targetCents:number;active:boolean};
+export type PotMovement={id:Id;potId:Id;type:PotMovementType;amountCents:number;date:string;description:string};
