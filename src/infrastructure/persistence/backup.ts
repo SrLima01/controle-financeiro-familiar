@@ -1,5 +1,5 @@
 import type { EntityCollection, EntityMap } from "./repository";
-import type { Account, CreditCard, Pot, PotMovement, RecurringRule, Transaction } from "../../domain/types/entities";
+import type { Account, CreditCard, Pot, PotMovement, RecurringRule, Transaction, Budget } from "../../domain/types/entities";
 import { validateAllTransactions } from "../../domain/transactions/financial-engine";
 
 export const BACKUP_SCHEMA_VERSION = 1;
@@ -20,7 +20,8 @@ const COLLECTIONS: (keyof EntityMap)[] = [
   "installmentGroups",
   "recurringRules",
   "pots",
-  "potMovements"
+  "potMovements",
+  "budgets"
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -53,6 +54,7 @@ export function validateBackup(input: unknown): FinanceBackup {
   if (!("recurringRules" in input.data)) input.data.recurringRules = [];
   if (!("pots" in input.data)) input.data.pots = [];
   if (!("potMovements" in input.data)) input.data.potMovements = [];
+  if (!("budgets" in input.data)) input.data.budgets = [];
 
   for (const collection of COLLECTIONS) {
     assertArray(input.data[collection], collection);
@@ -170,6 +172,16 @@ export function validateBackup(input: unknown): FinanceBackup {
     ) throw new Error("Invalid pot movement " + movement.id);
   }
 
+  const budgetCategoryIds = new Set(data.categories.map(c => c.id));
+  for (const budget of data.budgets as Budget[]) {
+    if (
+      typeof budget.month !== "string" || !/^\\d{4}-\\d{2}$/.test(budget.month) ||
+      !budgetCategoryIds.has(budget.categoryId) ||
+      !Number.isSafeInteger(budget.limitCents) || budget.limitCents < 0 ||
+      typeof budget.active !== "boolean"
+    ) throw new Error("Invalid budget " + budget.id);
+  }
+
   for (const tx of data.transactions as Transaction[]) {
     if (
       typeof tx.description !== "string" ||
@@ -260,6 +272,7 @@ export function emptyEntityCollection(): EntityCollection {
     installmentGroups: [],
     recurringRules: [],
     pots: [],
-    potMovements: []
+    potMovements: [],
+    budgets: []
   };
 }
