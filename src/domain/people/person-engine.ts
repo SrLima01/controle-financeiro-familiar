@@ -2,7 +2,7 @@ import type { EntityCollection } from "../../infrastructure/persistence/reposito
 import type { Person } from "../types/entities";
 
 function normalizedName(name: string): string {
-  return name.trim().replace(/\\s+/g, " ");
+  return name.trim().replace(/\s+/g, " ");
 }
 
 export function createPerson(name: string, data?: Pick<EntityCollection, "people">): Person {
