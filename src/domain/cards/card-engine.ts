@@ -113,7 +113,7 @@ export function calculateCardOutstanding(
     if (
       tx.status !== "CANCELLED" &&
       tx.creditCardId === card.id &&
-      tx.type === "EXPENSE"
+      tx.type === "EXPENSE" && tx.status === "PAID"
     ) {
       total += tx.amountCents;
     }
@@ -123,7 +123,7 @@ export function calculateCardOutstanding(
     if (
       tx.status !== "CANCELLED" &&
       tx.creditCardId === card.id &&
-      tx.type === "CARD_PAYMENT"
+      tx.type === "CARD_PAYMENT" && tx.status === "PAID"
     ) {
       total -= tx.amountCents;
     }
