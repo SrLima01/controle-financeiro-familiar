@@ -16,6 +16,19 @@ export function nextRecurringDate(date:string,frequency:RecurringFrequency):stri
   }
 }
 
+function recurringDateFromStart(startDate:string,frequency:RecurringFrequency,occurrenceIndex:number):string{
+  if(occurrenceIndex===0)return startDate;
+  switch(frequency){
+    case "WEEKLY": return addDays(startDate,7*occurrenceIndex);
+    case "BIWEEKLY": return addDays(startDate,14*occurrenceIndex);
+    case "MONTHLY": return addMonths(startDate,occurrenceIndex);
+    case "BIMONTHLY": return addMonths(startDate,2*occurrenceIndex);
+    case "QUARTERLY": return addMonths(startDate,3*occurrenceIndex);
+    case "SEMIANNUAL": return addMonths(startDate,6*occurrenceIndex);
+    case "ANNUAL": return addMonths(startDate,12*occurrenceIndex);
+  }
+}
+
 export type RecurringRuleInput=Omit<RecurringRule,"id"|"transactionIds">;
 
 export function createRecurringRule(input:RecurringRuleInput):RecurringRule{
@@ -42,7 +55,8 @@ export function generateRecurringTransactions(
       .filter((d):d is string=>Boolean(d))
   );
   const generated:Transaction[]=[];
-  let date=rule.startDate;
+  let occurrenceIndex=0;
+  let date=recurringDateFromStart(rule.startDate,rule.frequency,occurrenceIndex);
   while(date<=throughDate){
     if((!rule.endDate||date<=rule.endDate)&&!existingDates.has(date)){
       const tx:Transaction={
@@ -60,7 +74,8 @@ export function generateRecurringTransactions(
       validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:[...data.transactions,...generated]});
       generated.push(tx);
     }
-    date=nextRecurringDate(date,rule.frequency);
+    occurrenceIndex+=1;
+    date=recurringDateFromStart(rule.startDate,rule.frequency,occurrenceIndex);
   }
   if(!generated.length)return {data,generated};
   const ids=[...rule.transactionIds,...generated.map(t=>t.id)];
