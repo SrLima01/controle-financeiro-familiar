@@ -55,6 +55,20 @@ export type CardPaymentAllocation = {
   closingDate: string;
 };
 
+export function calculateCardCreditBalance(
+  card: CreditCard,
+  transactions: readonly Transaction[],
+): number {
+  const totalPayments = transactions
+    .filter(tx => tx.status === "PAID" && tx.creditCardId === card.id && tx.type === "CARD_PAYMENT")
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
+  const allocatedPayments = allocateCardPayments(card, transactions)
+    .reduce((sum, allocation) => sum + allocation.amountCents, 0);
+  const credit = Math.max(0, totalPayments - allocatedPayments);
+  assertCents(credit, "cardCreditBalance");
+  return credit;
+}
+
 function dateParts(date: string) {
   assertFinancialDate(date);
   const [y, m, d] = date.split("-").map(Number);
@@ -224,7 +238,9 @@ export function calculateCardAvailableLimit(
   transactions: readonly Transaction[],
 ): number {
   const available =
-    card.creditLimitCents - calculateCardOutstanding(card, transactions);
+    card.creditLimitCents -
+    calculateCardOutstanding(card, transactions) +
+    calculateCardCreditBalance(card, transactions);
   assertCents(available, "cardAvailableLimit");
   return available;
 }
