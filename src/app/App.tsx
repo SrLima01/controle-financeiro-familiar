@@ -5,7 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import type { EntityCollection } from "../infrastructure/persistence/repository";
 import type { Person, Category } from "../domain/types/entities";
 import { IndexedDbFinanceRepository } from "../infrastructure/persistence/indexeddb";
-import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateTransaction } from "../domain/transactions/financial-engine";
+import { calculateProjectedAccountBalance, calculateTotalRealBalance, hasAccountFinancialHistory, validateTransaction } from "../domain/transactions/financial-engine";
 import { calculateCardAvailableLimit, calculateCardCreditBalance, calculateCardOutstanding, getCardInvoice, validateCreditCard, validateCreditCardUpdate } from "../domain/cards/card-engine";
 import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
 import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
@@ -122,7 +122,7 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
     setError(""); const value=Number(opening.replace(/\\./g,"").replace(",","."));
     if(!name.trim()||!Number.isFinite(value)||value<0){setError("Informe nome e saldo inicial válido.");return;}
     const cents=Math.round(value*100); try{assertCents(cents,"openingBalanceCents")}catch(e){setError(e instanceof Error?e.message:"Valor inválido.");return;}
-    const account:Account={id:editing?.id ?? crypto.randomUUID(),name:name.trim(),type,openingBalanceCents:cents,active:true};
+    if(editing && hasAccountFinancialHistory(editing.id,data.transactions) && cents!==editing.openingBalanceCents){setError("O saldo inicial não pode ser alterado depois que a conta possui movimentações. Para corrigir um saldo histórico, use um ajuste de saldo.");return;}\n    const account:Account={id:editing?.id ?? crypto.randomUUID(),name:name.trim(),type,openingBalanceCents:cents,active:true};
     const next={...data,accounts:editing?data.accounts.map(a=>a.id===account.id?account:a):[...data.accounts,account]};
     setBusy(true);try{await onChange(next);reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false);}
   }
@@ -137,7 +137,7 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
     <section className="panel form-panel"><h2>{editing?"Editar conta":"Nova conta"}</h2>
       <div className="form-grid"><label>Nome<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Banco principal"/></label>
       <label>Tipo<select value={type} onChange={e=>setType(e.target.value as AccountType)}><option value="CHECKING">Conta corrente</option><option value="SAVINGS">Poupança</option><option value="DIGITAL">Conta digital</option><option value="CASH">Dinheiro</option><option value="INVESTMENT">Investimento</option></select></label>
-      <label>Saldo inicial<input inputMode="decimal" value={opening} onChange={e=>setOpening(e.target.value)} placeholder="0,00"/></label></div>
+      <label>Saldo inicial<input inputMode="decimal" value={opening} onChange={e=>setOpening(e.target.value)} placeholder="0,00" disabled={!!editing && hasAccountFinancialHistory(editing.id,data.transactions)}/></label></div>
       <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Criar conta"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div>
     </section>
   </div>;
