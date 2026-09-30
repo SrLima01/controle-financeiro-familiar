@@ -27,6 +27,8 @@ export function validateTransaction(tx:Transaction,data:FinancialData):void{
  if(tx.type==="CARD_PAYMENT"){
    if(!tx.accountId||!hasAccount(data.accounts,tx.accountId))throw new Error("Valid payment accountId is required");
    if(!tx.creditCardId||!hasCard(data.cards??[],tx.creditCardId))throw new Error("Valid creditCardId is required");
+   const card=data.cards?.find(c=>c.id===tx.creditCardId);
+   if(card && card.accountId!==tx.accountId)throw new Error("Card payment must use the card linked payment account");
  }
  if(tx.type!=="TRANSFER"&&tx.destinationAccountId)throw new Error("Only transfers may reference destinationAccountId");
  if(tx.type!=="EXPENSE"&&tx.type!=="CARD_PAYMENT"&&tx.creditCardId)throw new Error("Only expenses and card payments may reference a credit card");
