@@ -23,4 +23,21 @@ describe("report engine",()=>{
   ]};
   expect(cashFlow(data,"2026-09")).toEqual({month:"2026-09",incomeCents:10000,expenseCents:2000,cardPaymentsCents:3000,netCents:5000});
  });
+ it("counts a card purchase as expense but never counts its card payment as expense",()=>{
+  const data={...base,cards:[{id:"card",name:"Visa",accountId:"acc",creditLimitCents:100000,closingDay:10,dueDay:20,active:true}],transactions:[
+   {id:"1",date:"2026-09-05",type:"EXPENSE" as const,status:"PAID" as const,amountCents:4000,description:"Compra no cartão",categoryId:"cat",creditCardId:"card"},
+   {id:"2",date:"2026-09-20",type:"CARD_PAYMENT" as const,status:"PAID" as const,amountCents:4000,description:"Pagamento da fatura",accountId:"acc",creditCardId:"card"}
+  ]};
+  expect(expensesByCategory(data,"2026-09","REALIZED")[0].amountCents).toBe(4000);
+  expect(cashFlow(data,"2026-09","REALIZED")).toEqual({month:"2026-09",incomeCents:0,expenseCents:4000,cardPaymentsCents:4000,netCents:-8000});
+ });
+
+ it("keeps a pending card purchase out of realized expense reports but includes it in projected reports",()=>{
+  const data={...base,cards:[{id:"card",name:"Visa",accountId:"acc",creditLimitCents:100000,closingDay:10,dueDay:20,active:true}],transactions:[
+   {id:"1",date:"2026-09-15",type:"EXPENSE" as const,status:"PENDING" as const,amountCents:2500,description:"Compra pendente",categoryId:"cat",creditCardId:"card"}
+  ]};
+  expect(expensesByCategory(data,"2026-09","REALIZED")).toEqual([]);
+  expect(expensesByCategory(data,"2026-09","PROJECTED")[0].amountCents).toBe(2500);
+ });
+
 });
