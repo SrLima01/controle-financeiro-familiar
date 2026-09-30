@@ -21,6 +21,21 @@ describe("transaction integrity",()=>{
    const data={...base,cards:[...base.cards,{id:"card2",name:"Master",accountId:"a1",creditLimitCents:50000,closingDay:15,dueDay:25,active:true}]};
    expect(()=>validateTransactionUpdate(previous,next,data)).toThrow("cannot change its credit card");
  });
+ it("rejects changing the amount of a realized transaction",()=>{
+   const previous=tx({amountCents:1000});
+   const next=tx({amountCents:2000});
+   expect(()=>validateTransactionUpdate(previous,next,base)).toThrow("cannot change its amount");
+ });
+ it("rejects changing the date of a realized transaction",()=>{
+   const previous=tx({date:"2026-09-01"});
+   const next=tx({date:"2026-09-02"});
+   expect(()=>validateTransactionUpdate(previous,next,base)).toThrow("cannot change its date");
+ });
+ it("rejects changing the status of a realized transaction",()=>{
+   const previous=tx({status:"PAID"});
+   const next=tx({status:"PENDING"});
+   expect(()=>validateTransactionUpdate(previous,next,base)).toThrow("cannot change its status");
+ });
  it("allows changing references of a pending transaction",()=>{
    const previous=tx({status:"PENDING",accountId:"a1"});
    const next=tx({status:"PENDING",accountId:"a2"});
