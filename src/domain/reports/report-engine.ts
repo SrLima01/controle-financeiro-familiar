@@ -35,7 +35,7 @@ export function cashFlow(data:EntityCollection,month:string,mode:ReportMode="REA
  for(const t of data.transactions){
   if(t.date.slice(0,7)!==month||!includedStatus(t,mode))continue;
   if(t.type==="INCOME")income+=t.amountCents;
-  else if(t.type==="EXPENSE")expense+=t.amountCents;
+  else if(t.type==="EXPENSE"&& !t.creditCardId)expense+=t.amountCents;
   else if(t.type==="CARD_PAYMENT")cardPayments+=t.amountCents;
  }
  return {month,incomeCents:income,expenseCents:expense,cardPaymentsCents:cardPayments,netCents:income-expense-cardPayments};
