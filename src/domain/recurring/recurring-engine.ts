@@ -29,6 +29,26 @@ export function createRecurringRule(input:RecurringRuleInput):RecurringRule{
   return {...input,id:crypto.randomUUID(),description:input.description.trim(),transactionIds:[]};
 }
 
+export function validateRecurringRuleUpdate(previous:RecurringRule,next:RecurringRule):void{
+  if(previous.id!==next.id) throw new Error("Recurring rule id cannot change");
+  if(previous.transactionIds.length>0) throw new Error("Recurring rules with generated transactions cannot be edited");
+  if(next.transactionIds.length!==previous.transactionIds.length) throw new Error("Recurring rule transaction history cannot change");
+  createRecurringRule({
+    description:next.description,
+    frequency:next.frequency,
+    startDate:next.startDate,
+    endDate:next.endDate,
+    amountCents:next.amountCents,
+    type:next.type,
+    status:next.status,
+    categoryId:next.categoryId,
+    accountId:next.accountId,
+    creditCardId:next.creditCardId,
+    personId:next.personId,
+    active:next.active,
+  });
+}
+
 export function generateRecurringTransactions(
   data:EntityCollection,
   rule:RecurringRule,
