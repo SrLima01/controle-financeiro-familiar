@@ -35,6 +35,16 @@ export function validateTransaction(tx:Transaction,data:FinancialData):void{
  if(tx.type==="INCOME"&&(tx.categoryId&&data.categories?.find(c=>c.id===tx.categoryId)?.kind==="EXPENSE"))throw new Error("Income cannot use an expense category");
  if(tx.type==="EXPENSE"&&(tx.categoryId&&data.categories?.find(c=>c.id===tx.categoryId)?.kind==="INCOME"))throw new Error("Expense cannot use an income category");
 }
+export function validateTransactionUpdate(previous:Transaction,next:Transaction,data:FinancialData):void{
+ validateTransaction(next,data);
+ if(previous.id!==next.id)throw new Error("Transaction id cannot change");
+ if(previous.status==="CANCELLED")throw new Error("Cancelled transactions cannot be edited");
+ if(real(previous.status)){
+   if(previous.accountId!==next.accountId)throw new Error("A realized transaction cannot change its account");
+   if(previous.destinationAccountId!==next.destinationAccountId)throw new Error("A realized transfer cannot change its destination account");
+   if(previous.creditCardId!==next.creditCardId)throw new Error("A realized transaction cannot change its credit card");
+ }
+}
 export function validateAllTransactions(data:FinancialData):void{for(const tx of data.transactions)validateTransaction(tx,data)}
 function apply(tx:Transaction,id:string,b:number):number{if(tx.type==="INCOME"&&tx.accountId===id)return b+tx.amountCents;if(tx.type==="EXPENSE"&&tx.accountId===id)return b-tx.amountCents;if(tx.type==="TRANSFER"){if(tx.accountId===id)b-=tx.amountCents;if(tx.destinationAccountId===id)b+=tx.amountCents}if(tx.type==="CARD_PAYMENT"&&tx.accountId===id)b-=tx.amountCents;return b}
 export function calculateAccountBalance(accountId:string,data:FinancialData):number{const a=data.accounts.find(x=>x.id===accountId);if(!a)throw new Error("Unknown accountId");validateAllTransactions(data);let b=a.openingBalanceCents;for(const tx of data.transactions)if(real(tx.status))b=apply(tx,accountId,b);assertCents(b,"accountBalance");return b}
