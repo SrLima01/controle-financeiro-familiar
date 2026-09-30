@@ -9,5 +9,44 @@ describe("transaction integrity",()=>{
  it("rejects unknown category",()=>expect(()=>validateTransaction(tx({categoryId:"missing"}),base)).toThrow());
  it("rejects destination on non-transfer",()=>expect(()=>validateTransaction(tx({destinationAccountId:"a1"}),base)).toThrow());
  it("accepts a card payment linked to the card",()=>expect(()=>validateTransaction(tx({type:"CARD_PAYMENT",accountId:"a1",creditCardId:"card1",categoryId:undefined}),base)).not.toThrow());
+ it("rejects changing the account of a realized transaction",()=>{
+   const previous=tx({accountId:"a1"});
+   const next=tx({accountId:"a2"});
+   const data={...base,accounts:[...base.accounts,{id:"a2",name:"Outro banco",type:"CHECKING" as const,openingBalanceCents:0,active:true}]};
+   expect(()=>validateTransactionUpdate(previous,next,data)).toThrow("cannot change its account");
+ });
+ it("rejects changing the card of a realized card purchase",()=>{
+   const previous=tx({creditCardId:"card1",accountId:undefined});
+   const next=tx({creditCardId:"card2",accountId:undefined});
+   const data={...base,cards:[...base.cards,{id:"card2",name:"Master",accountId:"a1",creditLimitCents:50000,closingDay:15,dueDay:25,active:true}]};
+   expect(()=>validateTransactionUpdate(previous,next,data)).toThrow("cannot change its credit card");
+ });
+ it("rejects changing the amount of a realized transaction",()=>{
+   const previous=tx({amountCents:1000});
+   const next=tx({amountCents:2000});
+   expect(()=>validateTransactionUpdate(previous,next,base)).toThrow("cannot change its amount");
+ });
+ it("rejects changing the date of a realized transaction",()=>{
+   const previous=tx({date:"2026-09-01"});
+   const next=tx({date:"2026-09-02"});
+   expect(()=>validateTransactionUpdate(previous,next,base)).toThrow("cannot change its date");
+ });
+ it("rejects changing the status of a realized transaction",()=>{
+   const previous=tx({status:"PAID"});
+   const next=tx({status:"PENDING"});
+   expect(()=>validateTransactionUpdate(previous,next,base)).toThrow("cannot change its status");
+ });
+ it("allows changing references of a pending transaction",()=>{
+   const previous=tx({status:"PENDING",accountId:"a1"});
+   const next=tx({status:"PENDING",accountId:"a2"});
+   const data={...base,accounts:[...base.accounts,{id:"a2",name:"Outro banco",type:"CHECKING" as const,openingBalanceCents:0,active:true}]};
+   expect(()=>validateTransactionUpdate(previous,next,data)).not.toThrow();
+ });
+ it("rejects changing a transfer destination after realization",()=>{
+   const previous=tx({type:"TRANSFER",accountId:"a1",destinationAccountId:"a2"});
+   const next=tx({type:"TRANSFER",accountId:"a1",destinationAccountId:"a3"});
+   const data={...base,accounts:[...base.accounts,{id:"a2",name:"Destino",type:"CHECKING" as const,openingBalanceCents:0,active:true},{id:"a3",name:"Outro destino",type:"CHECKING" as const,openingBalanceCents:0,active:true}]};
+   expect(()=>validateTransactionUpdate(previous,next,data)).toThrow("cannot change its destination");
+ });
  it("rejects expense category on income",()=>expect(()=>validateTransaction({...tx({type:"INCOME",status:"RECEIVED"}),categoryId:"c1",accountId:"a1"},base)).toThrow());
 });
