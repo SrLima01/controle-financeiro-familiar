@@ -29,7 +29,7 @@ describe("report engine",()=>{
    {id:"2",date:"2026-09-20",type:"CARD_PAYMENT" as const,status:"PAID" as const,amountCents:4000,description:"Pagamento da fatura",accountId:"acc",creditCardId:"card"}
   ]};
   expect(expensesByCategory(data,"2026-09","REALIZED")[0].amountCents).toBe(4000);
-  expect(cashFlow(data,"2026-09","REALIZED")).toEqual({month:"2026-09",incomeCents:0,expenseCents:4000,cardPaymentsCents:4000,netCents:-8000});
+  expect(cashFlow(data,"2026-09","REALIZED")).toEqual({month:"2026-09",incomeCents:0,expenseCents:0,cardPaymentsCents:4000,netCents:-4000});
  });
 
  it("keeps a pending card purchase out of realized expense reports but includes it in projected reports",()=>{
