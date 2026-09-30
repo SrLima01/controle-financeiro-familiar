@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateCardAvailableLimit,
   calculateCardOutstanding,
+  calculateCardCreditBalance,
   validateCreditCardUpdate,
   getCardInvoice,
   invoiceClosingDate,
@@ -226,6 +227,17 @@ describe("card engine", () => {
     expect(calculateCardAvailableLimit(card, transactions)).toBe(80000);
   });
 
+  it("keeps an excess payment as card credit and restores available limit", () => {
+    const transactions = [
+      makeCardTransaction(card.id, "purchase-1", "2026-09-05", "EXPENSE", 10000),
+      makeCardTransaction(card.id, "payment-1", "2026-09-20", "CARD_PAYMENT", 20000),
+    ];
+
+    expect(calculateCardOutstanding(card, transactions)).toBe(0);
+    expect(calculateCardCreditBalance(card, transactions)).toBe(10000);
+    expect(calculateCardAvailableLimit(card, transactions)).toBe(110000);
+  });
+
   it("does not produce a negative invoice balance after overpayment", () => {
     const transactions: Transaction[] = [
       {
@@ -289,6 +301,17 @@ describe("card payment allocation", () => {
       openAmountCents: 4000,
     });
     expect(calculateCardOutstanding(card, transactions)).toBe(4000);
+  });
+
+  it("keeps an advance payment as card credit until a purchase exists", () => {
+    const transactions = [
+      tx("payment-1", "2026-09-05", "CARD_PAYMENT", 5000),
+      tx("purchase-1", "2026-09-15", "EXPENSE", 5000),
+    ];
+
+    expect(calculateCardCreditBalance(card, transactions)).toBe(5000);
+    expect(calculateCardOutstanding(card, transactions)).toBe(5000);
+    expect(calculateCardAvailableLimit(card, transactions)).toBe(100000);
   });
 
   it("does not use an advance payment to reduce a future invoice", () => {
