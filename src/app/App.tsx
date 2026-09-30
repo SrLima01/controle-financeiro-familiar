@@ -161,7 +161,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [parcelado,setParcelado]=useState(false);
  const [filter,setFilter]=useState<"ALL"|"INCOME"|"EXPENSE"|"TRANSFER"|"CARD_PAYMENT">("ALL");
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
- const activeAccounts=data.accounts.filter(a=>a.active),activeCards=data.cards.filter(c=>c.active),activePeople=data.people.filter(p=>p.active);
+ const activeAccounts=data.accounts.filter(a=>a.active),activeCards=data.cards.filter(c=>c.active),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),activePeople=data.people.filter(p=>p.active);
  const activeCategories=data.categories.filter(c=>c.active&&((type==="INCOME"||type==="EXPENSE")?c.kind===(type==="INCOME"?"INCOME":"EXPENSE"):false));
  const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
 
@@ -240,7 +240,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
      <label>{type==="TRANSFER"?"Conta de origem":type==="CARD_PAYMENT"?"Conta de pagamento":"Conta"}<select value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value&&type!=="CARD_PAYMENT")setCreditCardId("")}} disabled={type==="CARD_PAYMENT"&&!!creditCardId}><option value="">Selecione</option>{(type==="CARD_PAYMENT"&&creditCardId?data.accounts.filter(a=>a.id===data.cards.find(c=>c.id===creditCardId)?.accountId):activeAccounts).map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label>
      {type==="TRANSFER"&&<label>Conta de destino<select value={destinationAccountId} onChange={e=>setDestinationAccountId(e.target.value)}><option value="">Selecione</option>{activeAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
      {type==="EXPENSE"&&<label>Cartão de crédito (opcional)<select value={creditCardId} onChange={e=>{setCreditCardId(e.target.value);if(e.target.value)setAccountId("")}}><option value="">Nenhum / conta</option>{activeCards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-     {type==="CARD_PAYMENT"&&<label>Cartão<select value={creditCardId} onChange={e=>{const id=e.target.value;setCreditCardId(id);const card=data.cards.find(c=>c.id===id);setAccountId(card?.accountId??"")}}><option value="">Selecione</option>{activeCards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+     {type==="CARD_PAYMENT"&&<label>Cartão<select value={creditCardId} onChange={e=>{const id=e.target.value;setCreditCardId(id);const card=data.cards.find(c=>c.id===id);setAccountId(card?.accountId??"")}}><option value="">Selecione</option>{paymentCardOptions.map(c=><option key={c.id} value={c.id}>{c.name}{c.active?"":" (arquivado)"}</option>)}</select></label>}
      {type!=="TRANSFER"&&<label>Pessoa (opcional)<select value={personId} onChange={e=>setPersonId(e.target.value)}><option value="">Nenhuma</option>{activePeople.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
      {type==="EXPENSE"&&<label className="checkbox-field"><input type="checkbox" checked={parcelado} onChange={e=>setParcelado(e.target.checked)} disabled={!!editing}/> Parcelar esta saída</label>}
      {parcelado&&<label>Número de parcelas<input type="number" min="2" max="120" value={installments} onChange={e=>setInstallments(e.target.value)}/></label>}
