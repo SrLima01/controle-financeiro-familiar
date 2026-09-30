@@ -40,6 +40,9 @@ export function validateTransactionUpdate(previous:Transaction,next:Transaction,
  if(previous.id!==next.id)throw new Error("Transaction id cannot change");
  if(previous.status==="CANCELLED")throw new Error("Cancelled transactions cannot be edited");
  if(real(previous.status)){
+   if(next.status!==previous.status)throw new Error("A realized transaction cannot change its status");
+   if(next.amountCents!==previous.amountCents)throw new Error("A realized transaction cannot change its amount");
+   if(next.date!==previous.date)throw new Error("A realized transaction cannot change its date");
    if(previous.accountId!==next.accountId)throw new Error("A realized transaction cannot change its account");
    if(previous.destinationAccountId!==next.destinationAccountId)throw new Error("A realized transfer cannot change its destination account");
    if(previous.creditCardId!==next.creditCardId)throw new Error("A realized transaction cannot change its credit card");
