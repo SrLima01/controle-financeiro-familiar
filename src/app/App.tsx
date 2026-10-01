@@ -645,6 +645,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
   const [conflict,setConflict]=useState<{local:EntityCollection;remote:EntityCollection;remoteVersion:number}|null>(null);
   const [remoteVersion,setRemoteVersion]=useState(0);
   const [legacyData,setLegacyData]=useState<EntityCollection|null>(null);
+  const [legacyMigrationDismissed,setLegacyMigrationDismissed]=useState(false);
   const repo = useMemo(() => new IndexedDbFinanceRepository(family.id), [family.id]);
   useEffect(()=>{
     setLoading(true);
@@ -652,10 +653,11 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     setConflict(null);
     setRemoteVersion(0);
     setLegacyData(null);
+    setLegacyMigrationDismissed(localStorage.getItem(`legacy-migration-dismissed-${family.id}`) === "1");
     let cancelled=false;
     (async()=>{
       try {
-        if (await hasLegacyDatabase()) {
+        if (!localStorage.getItem(`legacy-migration-completed-${family.id}`) && !localStorage.getItem(`legacy-migration-dismissed-${family.id}`) && await hasLegacyDatabase()) {
           try { const oldData = await readLegacyLocalData(); if (!cancelled) setLegacyData(oldData); } catch {}
         }
         const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules"),pots:await repo.list("pots"),potMovements:await repo.list("potMovements"),budgets:await repo.list("budgets")};
@@ -742,7 +744,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     <Dashboard data={data}/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></header>
-    {legacyData && <section className="panel sync-conflict"><strong>Dados locais de uma versão anterior encontrados</strong><p>Encontramos dados salvos neste aparelho antes da separação por família. Eles não foram misturados automaticamente. Só importe se esses dados pertencem à família “{family.name}”.</p><div className="form-actions"><button className="secondary compact" onClick={()=>setLegacyData(null)}>Ignorar</button><button className="primary compact" onClick={()=>{const old=legacyData;if(old)void persist(old).then(()=>setLegacyData(null)).catch(e=>setError(e instanceof Error?e.message:"Não foi possível importar os dados antigos."));}}>Importar dados antigos</button></div></section>}
+    {legacyData && <section className="panel sync-conflict"><strong>Dados locais de uma versão anterior encontrados</strong><p>Encontramos dados salvos neste aparelho antes da separação por família. Eles não foram misturados automaticamente.</p><p>Se esta família já possui dados financeiros, não importe os dados antigos: a importação substitui o estado financeiro atual da família.</p><div className="form-actions"><button className="secondary compact" onClick={()=>{localStorage.setItem(`legacy-migration-dismissed-${family.id}`,"1");setLegacyData(null);}}>Ignorar</button><button className="primary compact" onClick={()=>{const old=legacyData;if(!old)return;const currentHasData=Object.values(data).some(items=>items.length>0);if(currentHasData){setError("A família atual já possui dados. Por segurança, os dados locais antigos não podem substituir esse estado automaticamente. Exporte um backup e faça a migração somente após confirmar que a família está vazia.");return;}void persist(old).then(()=>{localStorage.setItem(`legacy-migration-completed-${family.id}`,"1");setLegacyData(null)}).catch(e=>setError(e instanceof Error?e.message:"Não foi possível importar os dados antigos."));}}>Importar dados antigos</button></div></section>}
     {error && <div className="global-alert">{error}</div>}{conflict && <section className="panel sync-conflict"><strong>Conflito de sincronização</strong><p>Os dados deste aparelho e os dados online são diferentes. Não fazemos mesclagem automática de informações financeiras.</p><div className="form-actions"><button className="secondary compact" onClick={()=>void keepRemote()}>Usar dados online</button><button className="primary compact" onClick={()=>void keepLocal()}>Manter meus dados</button></div></section>}{loading ? <div className="loading">Carregando dados financeiros…</div> : content}
     <nav className="bottom-nav">{([["dashboard","Início","⌂"],["contas","Contas","▣"],["transacoes","Lançamentos","＋"],["cartoes","Cartões","▤"],["relatorios","Relatórios","▥"],["mais","Mais","•••"]] as const).map(([key,label,icon])=><button className={page===key?"active":""} key={key} onClick={()=>setPage(key)} aria-current={page===key?"page":undefined} aria-label={label}><span aria-hidden="true">{icon}</span><small>{label}</small></button>)}</nav>
   </div>;
