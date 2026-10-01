@@ -21,6 +21,7 @@ export function buildInstallmentSet(input: InstallmentInput): {
   transactions: Transaction[];
 } {
   assertNonNegativeCents(input.totalAmountCents, "totalAmountCents");
+  if (input.totalAmountCents <= 0) throw new Error("Valor total do parcelamento deve ser maior que zero.");
   if (!Number.isInteger(input.installmentCount) || input.installmentCount < 2) {
     throw new Error("Parcelamento deve ter pelo menos 2 parcelas.");
   }
