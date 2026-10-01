@@ -48,7 +48,7 @@ function AuthScreen({ onAuthenticated }:{onAuthenticated:(user:User)=>void}) {
     e.preventDefault(); setBusy(true); setError("");
     try {
       const result = mode==="login" ? await signInWithEmail(email,password) : await signUpWithEmail(email,password);
-      if (result.user) onAuthenticated(result.user);
+      if (result.session && result.user) onAuthenticated(result.user);
       else setError("Cadastro realizado. Confirme o e-mail antes de entrar.");
     } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível concluir."); }
     finally { setBusy(false); }
