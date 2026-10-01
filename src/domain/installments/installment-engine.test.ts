@@ -44,6 +44,10 @@ describe("installment engine", () => {
     expect(result.group.transactionIds).toEqual(result.transactions.map(t => t.id));
   });
 
+  it("rejects a zero-value parcelamento", () => {
+    expect(() => buildInstallmentSet({ ...base, totalAmountCents: 0 })).toThrow("maior que zero");
+  });
+
   it("rejects a one-installment parcelamento", () => {
     expect(() => buildInstallmentSet({ ...base, installmentCount: 1 })).toThrow();
   });
