@@ -402,7 +402,7 @@ function Settings({data,family,onChange,onSignOut}:{data:EntityCollection;family
  }
  return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Aplicativo</span><h1>Configurações</h1></div></div>
  {error&&<div className="global-alert">{error}</div>}
- <section className="panel"><h2>Família</h2><p>Compartilhe este código com outro membro para que ele possa entrar nesta família.</p><div className="family-invite-code"><strong>{family.invite_code}</strong><button className="secondary compact" onClick={()=>void navigator.clipboard?.writeText(family.invite_code).then(()=>alert("Código de convite copiado.")).catch(()=>setError(`Não foi possível copiar automaticamente. Código: ${family.invite_code}`))}>Copiar código</button></div></section>
+ <section className="panel"><h2>Família</h2><p>Compartilhe este código com outro membro para que ele possa entrar nesta família.</p><div className="family-invite-code"><strong>{family.invite_code}</strong><button className="secondary compact" onClick={async()=>{try{if(!navigator.clipboard)throw new Error("clipboard_unavailable");await navigator.clipboard.writeText(family.invite_code);alert("Código de convite copiado.");}catch{setError(`Não foi possível copiar automaticamente. Código: ${family.invite_code}`);}}}>Copiar código</button></div></section>
  <section className="panel settings-list">
   <div><strong>Backup completo</strong><p>Exporta todas as entidades financeiras em JSON.</p><button className="primary compact" onClick={()=>exportJson(data)}>Exportar JSON</button></div>
   <div><strong>Exportar lançamentos</strong><p>Gera CSV para Excel ou LibreOffice.</p><button className="secondary compact" onClick={()=>exportTransactionsCsv(data)}>Exportar CSV</button></div>
