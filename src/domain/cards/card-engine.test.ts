@@ -200,6 +200,12 @@ describe("card engine", () => {
     expect(calculateCardAvailableLimit(card, transactions)).toBe(70000);
   });
 
+  it("does not expose a negative available limit when debt exceeds the current limit", () => {
+    const transactions = [makeCardTransaction(card.id, "purchase-1", "2026-09-05", "EXPENSE", 120000)];
+    expect(calculateCardOutstanding(card, transactions)).toBe(120000);
+    expect(calculateCardAvailableLimit({ ...card, creditLimitCents: 100000 }, transactions)).toBe(0);
+  });
+
   it("calculates outstanding and available limit from realized purchases and payments", () => {
     const transactions: Transaction[] = [
       {
