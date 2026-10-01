@@ -5,7 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import type { EntityCollection } from "../infrastructure/persistence/repository";
 import type { Person, Category } from "../domain/types/entities";
 import { IndexedDbFinanceRepository, hasLegacyDatabase, readLegacyLocalData } from "../infrastructure/persistence/indexeddb";
-import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateTransaction } from "../domain/transactions/financial-engine";
+import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateAccountUpdate, validateTransaction } from "../domain/transactions/financial-engine";
 import { calculateCardAvailableLimit, calculateCardCreditBalance, calculateCardOutstanding, getCardInvoice, validateCreditCard, validateCreditCardUpdate } from "../domain/cards/card-engine";
 import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
 import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
@@ -122,6 +122,7 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
     if(!name.trim()||!Number.isFinite(value)||value<0){setError("Informe nome e saldo inicial válido.");return;}
     const cents=Math.round(value*100); try{assertCents(cents,"openingBalanceCents")}catch(e){setError(e instanceof Error?e.message:"Valor inválido.");return;}
     const account:Account={id:editing?.id ?? crypto.randomUUID(),name:name.trim(),type,openingBalanceCents:cents,active:true};
+    if(editing) validateAccountUpdate(editing,account,data.transactions);
     const next={...data,accounts:editing?data.accounts.map(a=>a.id===account.id?account:a):[...data.accounts,account]};
     setBusy(true);try{await onChange(next);reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false);}
   }
