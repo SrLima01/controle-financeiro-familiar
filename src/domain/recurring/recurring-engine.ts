@@ -29,6 +29,11 @@ function recurringDateFromStart(startDate:string,frequency:RecurringFrequency,oc
   }
 }
 
+export function validateRecurringTransactionUpdate(previous:Transaction,next:Transaction,rules:readonly RecurringRule[]):void{
+  const generated=rules.some(rule=>rule.transactionIds.includes(previous.id));
+  if(generated&&next.date!==previous.date) throw new Error("A data de um lançamento gerado por recorrência não pode ser alterada. Desative a regra e crie uma nova série para mudar a agenda.");
+}
+
 export type RecurringRuleInput=Omit<RecurringRule,"id"|"transactionIds">;
 
 export function createRecurringRule(input:RecurringRuleInput):RecurringRule{
