@@ -134,7 +134,7 @@ export function validateBackup(input: unknown): FinanceBackup {
     if (
       typeof group.description !== "string" ||
       !Number.isSafeInteger(group.totalAmountCents) ||
-      group.totalAmountCents < 0 ||
+      group.totalAmountCents <= 0 ||
       !Number.isInteger(group.installmentCount) ||
       group.installmentCount < 1 ||
       !Array.isArray(group.transactionIds)
@@ -147,7 +147,7 @@ export function validateBackup(input: unknown): FinanceBackup {
     if (
       typeof rule.description !== "string" ||
       !Number.isSafeInteger(rule.amountCents) ||
-      rule.amountCents < 0 ||
+      rule.amountCents <= 0 ||
       !["INCOME", "EXPENSE"].includes(rule.type) ||
       !["PENDING", "PAID", "RECEIVED", "PLANNED"].includes(rule.status) ||
       !["WEEKLY", "BIWEEKLY", "MONTHLY", "BIMONTHLY", "QUARTERLY", "SEMIANNUAL", "ANNUAL"].includes(rule.frequency) ||
