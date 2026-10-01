@@ -74,6 +74,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
   const [code,setCode]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
+  const authUserIdRef = useRef<string|null>(null);
   useEffect(()=>{ listMyFamilies().then(setFamilies).catch(e=>setError(e instanceof Error?e.message:"Não foi possível carregar as famílias.")); },[]);
   async function create() {
     if (!name.trim()) return;
@@ -758,8 +759,8 @@ export default function App() {
   const [error,setError]=useState("");
   useEffect(()=>{
     let alive=true;
-    getAuthState().then(s=>{if(alive){setUser(s.user);setLoading(false)}}).catch(e=>{if(alive){setError(e instanceof Error?e.message:"Supabase não configurado.");setLoading(false)}});
-    const subscription=onAuthStateChange(s=>{if(alive){setFamily(null);setUser(s.user)}});
+    getAuthState().then(s=>{if(alive){authUserIdRef.current=s.user?.id ?? null;setUser(s.user);setLoading(false)}}).catch(e=>{if(alive){setError(e instanceof Error?e.message:"Supabase não configurado.");setLoading(false)}});
+    const subscription=onAuthStateChange(s=>{\n      if(!alive)return;\n      const nextUserId=s.user?.id ?? null;\n      if(authUserIdRef.current !== nextUserId){\n        authUserIdRef.current=nextUserId;\n        setFamily(null);\n      }\n      setUser(s.user);\n    });
     return ()=>{alive=false;subscription.data.subscription.unsubscribe()};
   },[]);
   if(loading)return <div className="loading full">Carregando…</div>;
