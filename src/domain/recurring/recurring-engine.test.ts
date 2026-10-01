@@ -32,4 +32,15 @@ describe("recurring engine",()=>{
    const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
    expect(generateRecurringTransactions(data,rule,"2026-12-31").generated).toHaveLength(2);
  });
- it("rejects editing a rule after transactions were generated",()=>{\n   const rule=createRecurringRule(base);\n   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};\n   const generated=generateRecurringTransactions(data,rule,"2026-01-31");\n   const stored=generated.data.recurringRules[0];\n   expect(()=>validateRecurringRuleUpdate(stored,{...stored,amountCents:200000})).toThrow("generated transactions");\n });\n it("allows editing a rule before its first generation",()=>{\n   const rule=createRecurringRule(base);\n   expect(()=>validateRecurringRuleUpdate(rule,{...rule,amountCents:200000})).not.toThrow();\n });\n});
+ it("rejects editing a rule after transactions were generated",()=>{
+   const rule=createRecurringRule(base);
+   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
+   const generated=generateRecurringTransactions(data,rule,"2026-01-31");
+   const stored=generated.data.recurringRules[0];
+   expect(()=>validateRecurringRuleUpdate(stored,{...stored,amountCents:200000})).toThrow("generated transactions");
+ });
+ it("allows editing a rule before its first generation",()=>{
+   const rule=createRecurringRule(base);
+   expect(()=>validateRecurringRuleUpdate(rule,{...rule,amountCents:200000})).not.toThrow();
+ });
+});
