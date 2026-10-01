@@ -6,7 +6,10 @@ const accounts=[{id:"a",name:"Conta",type:"CHECKING" as const,openingBalanceCent
 const base={description:"Aluguel",frequency:"MONTHLY" as const,startDate:"2026-01-31",amountCents:100000,type:"EXPENSE" as const,status:"PLANNED" as const,accountId:"a",active:true};
 
 describe("recurring engine",()=>{
- it("rejects a zero-value recurring rule",()=>{\n   expect(()=>createRecurringRule({...base,amountCents:0})).toThrow("maior que zero");\n });\n it("advances dates according to frequency",()=>{
+ it("rejects a zero-value recurring rule",()=>{
+   expect(()=>createRecurringRule({...base,amountCents:0})).toThrow("maior que zero");
+ });
+ it("advances dates according to frequency",()=>{
    expect(nextRecurringDate("2026-01-31","MONTHLY")).toBe("2026-02-28");
    expect(nextRecurringDate("2026-01-05","BIWEEKLY")).toBe("2026-01-19");
  });
