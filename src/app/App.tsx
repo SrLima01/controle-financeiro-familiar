@@ -14,7 +14,7 @@ import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator"
 import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
 import { assertCents } from "../domain/money/cents";
 import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
-import { createRecurringRule, deactivateRecurringRule, generateRecurringTransactions } from "../domain/recurring/recurring-engine";
+import { createRecurringRule, deactivateRecurringRule, generateRecurringTransactions, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
 import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
 import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
 import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
@@ -163,6 +163,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const activeAccounts=data.accounts.filter(a=>a.active),activeCards=data.cards.filter(c=>c.active),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),activePeople=data.people.filter(p=>p.active);
  const activeCategories=data.categories.filter(c=>c.active&&((type==="INCOME"||type==="EXPENSE")?c.kind===(type==="INCOME"?"INCOME":"EXPENSE"):false));
+ const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
  const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
 
  function reset(){setEditing(null);setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setError("")}
@@ -199,6 +200,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
        const available=calculateCardAvailableLimit(card,data.transactions)+(editing?.creditCardId===card.id&&editing.type==="EXPENSE"?editing.amountCents:0);
        if(amountCents>available) throw new Error(`Limite disponível insuficiente. Disponível: ${money(available)}.`);
      }
+     if(editing) validateRecurringTransactionUpdate(editing,tx,data.recurringRules);
      validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});
      const next={...data,transactions:editing?data.transactions.map(t=>t.id===tx.id?tx:t):[...data.transactions,tx]};
      setBusy(true);await onChange(next);reset();
@@ -233,7 +235,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    <section className="panel form-panel"><h2>{editing?"Editar lançamento":"Novo lançamento"}</h2><div className="form-grid">
      <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as TransactionType;setType(v);setCategoryId("");setCreditCardId("");if(v!=="EXPENSE")setParcelado(false)}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
      <label>Status<select value={status} onChange={e=>setStatus(e.target.value as RecurringRule["status"])}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
-     <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} required/></label>
+     <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} disabled={recurringGenerated} required/></label>
      <label>Valor total<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00" required/></label>
      <label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: Mercado"/></label>
      {(type==="INCOME"||type==="EXPENSE")&&<label>Categoria<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Selecione</option>{activeCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
