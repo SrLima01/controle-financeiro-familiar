@@ -78,7 +78,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
   async function create() {
     if (!name.trim()) return;
     setBusy(true);setError("");
-    try { const id=await createFamily(name.trim()); const family={id,name:name.trim(),invite_code:"",created_by:user.id,created_at:new Date().toISOString()}; onReady(family); } catch(e){setError(e instanceof Error?e.message:"Não foi possível criar.");} finally{setBusy(false);}
+    try { const id=await createFamily(name.trim()); const created=(await listMyFamilies()).find(f=>f.id===id); if(created) onReady(created); else setError("Família criada, mas não foi possível carregar seus dados."); } catch(e){setError(e instanceof Error?e.message:"Não foi possível criar.");} finally{setBusy(false);}
   }
   async function join() {
     if (!code.trim()) return;
