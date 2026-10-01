@@ -1,7 +1,7 @@
 import type { Account, Category, CreditCard, InstallmentGroup, Person, Pot, PotMovement, RecurringRule, Transaction, Budget } from "../../domain/types/entities";
 import type { EntityCollection, EntityMap, FinanceRepository, StoredEntity } from "./repository";
 
-const DB_NAME = "controle-financeiro-familiar";
+const DB_NAME_PREFIX = "controle-financeiro-familiar";
 const DB_VERSION = 4;
 const STORES = ["people", "categories", "accounts", "cards", "transactions", "installmentGroups", "recurringRules", "pots", "potMovements", "budgets"] as const;
 type StoreName = typeof STORES[number];
@@ -10,10 +10,10 @@ function now(): string {
   return new Date().toISOString();
 }
 
-function openDatabase(): Promise<IDBDatabase> {
+function openDatabase(dbName: string): Promise<IDBDatabase> {
   if (typeof indexedDB === "undefined") return Promise.reject(new Error("IndexedDB is not available"));
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(dbName, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
       for (const store of STORES) {
@@ -80,8 +80,15 @@ function requestError<T>(request: IDBRequest<T>, fail: (error: unknown) => void)
 }
 
 export class IndexedDbFinanceRepository implements FinanceRepository {
+  private readonly dbName: string;
+
+  constructor(familyId: string) {
+    if (!familyId.trim()) throw new Error("familyId é obrigatório para o armazenamento local.");
+    this.dbName = `${DB_NAME_PREFIX}-${familyId}`;
+  }
+
   async list<K extends keyof EntityMap>(collection: K): Promise<EntityMap[K][]> {
-    const db = await openDatabase();
+    const db = await openDatabase(this.dbName);
     try {
       return await runTransaction(db, [collection], "readonly", (tx, setResult) => {
         const request = tx.objectStore(collection).getAll();
@@ -94,7 +101,7 @@ export class IndexedDbFinanceRepository implements FinanceRepository {
   }
 
   async get<K extends keyof EntityMap>(collection: K, id: string): Promise<EntityMap[K] | undefined> {
-    const db = await openDatabase();
+    const db = await openDatabase(this.dbName);
     try {
       return await runTransaction(db, [collection], "readonly", (tx, setResult) => {
         const request = tx.objectStore(collection).get(id);
@@ -107,7 +114,7 @@ export class IndexedDbFinanceRepository implements FinanceRepository {
   }
 
   async put<K extends keyof EntityMap>(collection: K, entity: EntityMap[K]): Promise<void> {
-    const db = await openDatabase();
+    const db = await openDatabase(this.dbName);
     try {
       await runTransaction(db, [collection], "readwrite", (tx) => {
         const store = tx.objectStore(collection);
@@ -131,7 +138,7 @@ export class IndexedDbFinanceRepository implements FinanceRepository {
   }
 
   async putMany<K extends keyof EntityMap>(collection: K, entities: EntityMap[K][]): Promise<void> {
-    const db = await openDatabase();
+    const db = await openDatabase(this.dbName);
     try {
       await runTransaction(db, [collection], "readwrite", (tx) => {
         const store = tx.objectStore(collection);
@@ -146,7 +153,7 @@ export class IndexedDbFinanceRepository implements FinanceRepository {
   }
 
   async replaceAll(data: EntityCollection): Promise<void> {
-    const db = await openDatabase();
+    const db = await openDatabase(this.dbName);
     try {
       await runTransaction(db, STORES, "readwrite", (tx) => {
         for (const storeName of STORES) {
@@ -165,7 +172,7 @@ export class IndexedDbFinanceRepository implements FinanceRepository {
   }
 
   async clear(): Promise<void> {
-    const db = await openDatabase();
+    const db = await openDatabase(this.dbName);
     try {
       await runTransaction(db, STORES, "readwrite", (tx) => {
         for (const name of STORES) tx.objectStore(name).clear();
