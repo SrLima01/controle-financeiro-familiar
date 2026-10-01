@@ -26,7 +26,6 @@ import { extractReceiptDate, extractReceiptMerchant, extractReceiptTotal, recogn
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais" | "relatorios";
 const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [], budgets: [] };
-const repo = new IndexedDbFinanceRepository();
 
 function money(cents:number) {
   return new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(cents / 100);
@@ -642,7 +641,12 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
   const [error,setError]=useState("");
   const [conflict,setConflict]=useState<{local:EntityCollection;remote:EntityCollection;remoteVersion:number}|null>(null);
   const [remoteVersion,setRemoteVersion]=useState(0);
+  const repo = useMemo(() => new IndexedDbFinanceRepository(family.id), [family.id]);
   useEffect(()=>{
+    setLoading(true);
+    setError("");
+    setConflict(null);
+    setRemoteVersion(0);
     let cancelled=false;
     (async()=>{
       try {
