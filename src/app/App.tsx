@@ -651,9 +651,37 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     (async()=>{
       try {
         const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules"),pots:await repo.list("pots"),potMovements:await repo.list("potMovements"),budgets:await repo.list("budgets")};
+        const syncMeta=await repo.getSyncMetadata();
         if(!cancelled)setData(local);
+
         const remote=await pullFinanceState(family.id);
-        if(remote && !cancelled){ await repo.replaceAll(remote.state); setData(remote.state); setRemoteVersion(remote.version); }
+        if(cancelled)return;
+
+        if(syncMeta.dirty){
+          if(remote && remote.version!==syncMeta.remoteVersion){
+            setConflict({local,remote:remote.state,remoteVersion:remote.version});
+            setRemoteVersion(remote.version);
+          }else{
+            const result=await pushFromLocalFirst(family.id,local,syncMeta.remoteVersion);
+            if(result.kind==="pushed"){
+              await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
+              setRemoteVersion(result.version);
+            }else{
+              const latest=await pullFinanceState(family.id);
+              if(latest){
+                setConflict({local,remote:latest.state,remoteVersion:latest.version});
+                setRemoteVersion(latest.version);
+              }
+            }
+          }
+        }else if(remote){
+          await repo.replaceAll(remote.state);
+          await repo.setSyncMetadata({remoteVersion:remote.version,dirty:false});
+          setData(remote.state);
+          setRemoteVersion(remote.version);
+        }else{
+          setRemoteVersion(syncMeta.remoteVersion);
+        }
       } catch(e){ if(!cancelled)setError(e instanceof Error?e.message:"Falha ao carregar dados."); }
       finally{if(!cancelled)setLoading(false);}
     })();
@@ -661,22 +689,41 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
   },[family.id]);
   async function persist(next:EntityCollection){
     setError("");
-    await repo.replaceAll(next); setData(next);
+    await repo.replaceAll(next);
+    await repo.setSyncMetadata({remoteVersion,dirty:true});
+    setData(next);
     const result=await pushFromLocalFirst(family.id,next,remoteVersion);
-    if(result.kind==="pushed"){setRemoteVersion(result.version);setConflict(null);return;}
+    if(result.kind==="pushed"){
+      await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
+      setRemoteVersion(result.version);
+      setConflict(null);
+      return;
+    }
     const remote=await pullFinanceState(family.id);
     if(remote){setConflict({local:next,remote:remote.state,remoteVersion:remote.version});setRemoteVersion(remote.version);}
     throw new Error("Conflito de sincronização: outro aparelho alterou os dados online. Escolha abaixo qual estado deve prevalecer.");
   }
   async function keepRemote(){
     if(!conflict)return;
-    await repo.replaceAll(conflict.remote); setData(conflict.remote); setRemoteVersion(conflict.remoteVersion); setConflict(null); setError("");
+    await repo.replaceAll(conflict.remote);
+    await repo.setSyncMetadata({remoteVersion:conflict.remoteVersion,dirty:false});
+    setData(conflict.remote);
+    setRemoteVersion(conflict.remoteVersion);
+    setConflict(null);
+    setError("");
   }
   async function keepLocal(){
     if(!conflict)return;
     setError("");
+    await repo.setSyncMetadata({remoteVersion:conflict.remoteVersion,dirty:true});
     const result=await pushFromLocalFirst(family.id,conflict.local,conflict.remoteVersion);
-    if(result.kind==="pushed"){setRemoteVersion(result.version);setConflict(null);setError("");return;}
+    if(result.kind==="pushed"){
+      await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
+      setRemoteVersion(result.version);
+      setConflict(null);
+      setError("");
+      return;
+    }
     setError("O estado online mudou novamente. Atualize a tela e resolva o novo conflito.");
   }
   const content = page==="dashboard" ? <Dashboard data={data}/> :
