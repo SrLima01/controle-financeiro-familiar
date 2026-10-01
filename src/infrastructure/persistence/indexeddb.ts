@@ -4,7 +4,10 @@ import type { EntityCollection, EntityMap, FinanceRepository, StoredEntity } fro
 const DB_NAME_PREFIX = "controle-financeiro-familiar";
 const DB_VERSION = 4;
 const STORES = ["people", "categories", "accounts", "cards", "transactions", "installmentGroups", "recurringRules", "pots", "potMovements", "budgets"] as const;
+const META_STORE = "syncMeta" as const;
 type StoreName = typeof STORES[number];
+type SyncStoreName = StoreName | typeof META_STORE;
+export type LocalSyncMetadata = { remoteVersion: number; dirty: boolean };
 
 function now(): string {
   return new Date().toISOString();
@@ -19,6 +22,7 @@ function openDatabase(dbName: string): Promise<IDBDatabase> {
       for (const store of STORES) {
         if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE, { keyPath: "id" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("Could not open IndexedDB"));
@@ -33,7 +37,7 @@ function openDatabase(dbName: string): Promise<IDBDatabase> {
  */
 function runTransaction<T>(
   db: IDBDatabase,
-  stores: readonly StoreName[],
+  stores: readonly SyncStoreName[],
   mode: IDBTransactionMode,
   work: (tx: IDBTransaction, setResult: (value: T) => void) => void
 ): Promise<T> {
@@ -165,6 +169,33 @@ export class IndexedDbFinanceRepository implements FinanceRepository {
             store.put({ ...entity, createdAt: timestamp, updatedAt: timestamp, revision: 1 });
           }
         }
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  async getSyncMetadata(): Promise<LocalSyncMetadata> {
+    const db = await openDatabase(this.dbName);
+    try {
+      return await runTransaction(db, [META_STORE], "readonly", (tx, setResult) => {
+        const request = tx.objectStore(META_STORE).get("sync");
+        request.onsuccess = () => {
+          const value = request.result as { id: string; remoteVersion: number; dirty: boolean } | undefined;
+          setResult({ remoteVersion: value?.remoteVersion ?? 0, dirty: value?.dirty ?? false });
+        };
+        requestError(request, error => { try { tx.abort(); } catch {} throw error; });
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  async setSyncMetadata(metadata: LocalSyncMetadata): Promise<void> {
+    const db = await openDatabase(this.dbName);
+    try {
+      await runTransaction(db, [META_STORE], "readwrite", (tx) => {
+        tx.objectStore(META_STORE).put({ id: "sync", ...metadata, updatedAt: now() });
       });
     } finally {
       db.close();
