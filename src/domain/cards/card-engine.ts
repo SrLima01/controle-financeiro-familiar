@@ -237,10 +237,12 @@ export function calculateCardAvailableLimit(
   card: CreditCard,
   transactions: readonly Transaction[],
 ): number {
-  const available =
+  const available = Math.max(
+    0,
     card.creditLimitCents -
-    calculateCardOutstanding(card, transactions) +
-    calculateCardCreditBalance(card, transactions);
+      calculateCardOutstanding(card, transactions) +
+      calculateCardCreditBalance(card, transactions),
+  );
   assertCents(available, "cardAvailableLimit");
   return available;
 }
