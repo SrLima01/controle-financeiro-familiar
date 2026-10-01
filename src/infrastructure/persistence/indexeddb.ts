@@ -17,6 +17,28 @@ export async function hasLegacyDatabase(): Promise<boolean> {
   return databases.some(database => database.name === LEGACY_DB_NAME);
 }
 
+export async function readLegacyLocalData(): Promise<EntityCollection> {
+  if (!(await hasLegacyDatabase())) throw new Error("Nenhum armazenamento local legado foi encontrado.");
+  const db = await openDatabase(LEGACY_DB_NAME);
+  try {
+    return await runTransaction(db, STORES, "readonly", (tx, setResult) => {
+      const result = {} as EntityCollection;
+      let remaining = STORES.length;
+      for (const store of STORES) {
+        const request = tx.objectStore(store).getAll();
+        request.onsuccess = () => {
+          (result as Record<string, unknown[]>)[store] = request.result;
+          remaining -= 1;
+          if (remaining === 0) setResult(result);
+        };
+        requestError(request, error => { try { tx.abort(); } catch {} throw error; });
+      }
+    });
+  } finally {
+    db.close();
+  }
+}
+
 function now(): string {
   return new Date().toISOString();
 }
