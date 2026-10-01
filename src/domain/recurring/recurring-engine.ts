@@ -18,6 +18,11 @@ export function nextRecurringDate(date:string,frequency:RecurringFrequency):stri
 
 export type RecurringRuleInput=Omit<RecurringRule,"id"|"transactionIds">;
 
+export function validateRecurringTransactionUpdate(previous:Transaction,next:Transaction,rules:readonly RecurringRule[]):void{
+  const generated=rules.some(rule=>rule.transactionIds.includes(previous.id));
+  if(generated&&next.date!==previous.date) throw new Error("A data de um lançamento gerado por recorrência não pode ser alterada. Desative a regra e crie uma nova série para mudar a agenda.");
+}
+
 export function createRecurringRule(input:RecurringRuleInput):RecurringRule{
   assertFinancialDate(input.startDate);
   if(input.endDate) assertFinancialDate(input.endDate);
