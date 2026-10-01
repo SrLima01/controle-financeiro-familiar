@@ -78,7 +78,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
   async function create() {
     if (!name.trim()) return;
     setBusy(true);setError("");
-    try { const id=await createFamily(name.trim()); const family={id,name:name.trim(),invite_code:"",created_by:user.id,created_at:new Date().toISOString()}; onReady(family); } catch(e){setError(e instanceof Error?e.message:"Não foi possível criar.");} finally{setBusy(false);}
+    try { const id=await createFamily(name.trim()); const created=(await listMyFamilies()).find(f=>f.id===id); if(created) onReady(created); else setError("Família criada, mas não foi possível carregar seus dados."); } catch(e){setError(e instanceof Error?e.message:"Não foi possível criar.");} finally{setBusy(false);}
   }
   async function join() {
     if (!code.trim()) return;
@@ -389,7 +389,7 @@ function Reports({data}:{data:EntityCollection}) {
  </div>;
 }
 
-function Settings({data,onChange,onSignOut}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
+function Settings({data,family,onChange,onSignOut}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
  const [error,setError]=useState(""); const [busy,setBusy]=useState(false);
  async function importFile(file:File){
   setError("");setBusy(true);
@@ -402,6 +402,7 @@ function Settings({data,onChange,onSignOut}:{data:EntityCollection;onChange:(nex
  }
  return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Aplicativo</span><h1>Configurações</h1></div></div>
  {error&&<div className="global-alert">{error}</div>}
+ <section className="panel"><h2>Família</h2><p>Compartilhe este código com outro membro para que ele possa entrar nesta família.</p><div className="family-invite-code"><strong>{family.invite_code}</strong><button className="secondary compact" onClick={async()=>{try{if(!navigator.clipboard)throw new Error("clipboard_unavailable");await navigator.clipboard.writeText(family.invite_code);alert("Código de convite copiado.");}catch{setError(`Não foi possível copiar automaticamente. Código: ${family.invite_code}`);}}}>Copiar código</button></div></section>
  <section className="panel settings-list">
   <div><strong>Backup completo</strong><p>Exporta todas as entidades financeiras em JSON.</p><button className="primary compact" onClick={()=>exportJson(data)}>Exportar JSON</button></div>
   <div><strong>Exportar lançamentos</strong><p>Gera CSV para Excel ou LibreOffice.</p><button className="secondary compact" onClick={()=>exportTransactionsCsv(data)}>Exportar CSV</button></div>
@@ -619,9 +620,9 @@ function People({data,onChange}:{data:EntityCollection;onChange:(next:EntityColl
  </div>;
 }
 
-function More({data,onChange,onSignOut}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
+function More({data,family,onChange,onSignOut}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
  const [section,setSection]=useState<"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"categories"|"settings">("smart");
- return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="receipt"?"active":""} onClick={()=>setSection("receipt")}>Ler recibo</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="people"?"active":""} onClick={()=>setSection("people")}>Pessoas</button><button className={section==="categories"?"active":""} onClick={()=>setSection("categories")}>Categorias</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:section==="people"?<People data={data} onChange={onChange}/>:section==="categories"?<Categories data={data} onChange={onChange}/>:<Settings data={data} onChange={onChange} onSignOut={onSignOut}/>}</>;
+ return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="receipt"?"active":""} onClick={()=>setSection("receipt")}>Ler recibo</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="people"?"active":""} onClick={()=>setSection("people")}>Pessoas</button><button className={section==="categories"?"active":""} onClick={()=>setSection("categories")}>Categorias</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:section==="people"?<People data={data} onChange={onChange}/>:section==="categories"?<Categories data={data} onChange={onChange}/>:<Settings data={data} family={family} onChange={onChange} onSignOut={onSignOut}/>}</>;
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
@@ -740,7 +741,7 @@ function AppShell({user,family,onSignOut}:{user:User;family:Family;onSignOut:()=
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
-    page==="mais" ? <More data={data} onChange={persist} onSignOut={onSignOut}/> : page==="relatorios" ? <Reports data={data}/> :
+    page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut}/> : page==="relatorios" ? <Reports data={data}/> :
     <Dashboard data={data}/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></header>
