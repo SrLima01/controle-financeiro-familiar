@@ -2,12 +2,42 @@ import type { Account, Category, CreditCard, InstallmentGroup, Person, Pot, PotM
 import type { EntityCollection, EntityMap, FinanceRepository, StoredEntity } from "./repository";
 
 const DB_NAME_PREFIX = "controle-financeiro-familiar";
+const LEGACY_DB_NAME = "controle-financeiro-familiar";
 const DB_VERSION = 4;
 const STORES = ["people", "categories", "accounts", "cards", "transactions", "installmentGroups", "recurringRules", "pots", "potMovements", "budgets"] as const;
 const META_STORE = "syncMeta" as const;
 type StoreName = typeof STORES[number];
 type SyncStoreName = StoreName | typeof META_STORE;
 export type LocalSyncMetadata = { remoteVersion: number; dirty: boolean };
+
+export function getLegacyDatabaseName(): string { return LEGACY_DB_NAME; }
+export async function hasLegacyDatabase(): Promise<boolean> {
+  if (typeof indexedDB === "undefined" || typeof indexedDB.databases !== "function") return false;
+  const databases = await indexedDB.databases();
+  return databases.some(database => database.name === LEGACY_DB_NAME);
+}
+
+export async function readLegacyLocalData(): Promise<EntityCollection> {
+  if (!(await hasLegacyDatabase())) throw new Error("Nenhum armazenamento local legado foi encontrado.");
+  const db = await openDatabase(LEGACY_DB_NAME);
+  try {
+    return await runTransaction(db, STORES, "readonly", (tx, setResult) => {
+      const result = {} as EntityCollection;
+      let remaining = STORES.length;
+      for (const store of STORES) {
+        const request = tx.objectStore(store).getAll();
+        request.onsuccess = () => {
+          (result as Record<string, unknown[]>)[store] = request.result;
+          remaining -= 1;
+          if (remaining === 0) setResult(result);
+        };
+        requestError(request, error => { try { tx.abort(); } catch {} throw error; });
+      }
+    });
+  } finally {
+    db.close();
+  }
+}
 
 function now(): string {
   return new Date().toISOString();
