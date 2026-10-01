@@ -759,7 +759,7 @@ export default function App() {
   useEffect(()=>{
     let alive=true;
     getAuthState().then(s=>{if(alive){setUser(s.user);setLoading(false)}}).catch(e=>{if(alive){setError(e instanceof Error?e.message:"Supabase não configurado.");setLoading(false)}});
-    const subscription=onAuthStateChange(s=>{if(alive)setUser(s.user)});
+    const subscription=onAuthStateChange(s=>{if(alive){setFamily(null);setUser(s.user)}});
     return ()=>{alive=false;subscription.data.subscription.unsubscribe()};
   },[]);
   if(loading)return <div className="loading full">Carregando…</div>;
