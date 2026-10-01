@@ -42,7 +42,7 @@ export function createRecurringRule(input:RecurringRuleInput):RecurringRule{
   return {...input,id:crypto.randomUUID(),description:input.description.trim(),transactionIds:[]};
 }
 
-export function generateRecurringTransactions(
+export function validateRecurringRuleUpdate(previous:RecurringRule,next:RecurringRule):void{\n  if(previous.id!==next.id) throw new Error("Recurring rule id cannot change");\n  if(previous.transactionIds.length>0) throw new Error("Recurring rules with generated transactions cannot be edited. Create a new rule to preserve history.");\n  if(JSON.stringify(previous.transactionIds)!==JSON.stringify(next.transactionIds)) throw new Error("Recurring rule transaction history cannot change");\n  createRecurringRule(next);\n}\n\nexport function generateRecurringTransactions(
   data:EntityCollection,
   rule:RecurringRule,
   throughDate:string
