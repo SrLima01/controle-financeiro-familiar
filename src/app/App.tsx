@@ -162,6 +162,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const activeAccounts=data.accounts.filter(a=>a.active),activeCards=data.cards.filter(c=>c.active),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),activePeople=data.people.filter(p=>p.active);
  const activeCategories=data.categories.filter(c=>c.active&&((type==="INCOME"||type==="EXPENSE")?c.kind===(type==="INCOME"?"INCOME":"EXPENSE"):false));
+ const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
  const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
 
  function reset(){setEditing(null);setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setError("")}
