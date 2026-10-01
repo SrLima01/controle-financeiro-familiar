@@ -35,6 +35,7 @@ export function createRecurringRule(input:RecurringRuleInput):RecurringRule{
   assertFinancialDate(input.startDate);
   if(input.endDate) assertFinancialDate(input.endDate);
   assertNonNegativeCents(input.amountCents,"amountCents");
+  if(input.amountCents<=0) throw new Error("O valor da recorrência deve ser maior que zero.");
   if(input.endDate && input.endDate<input.startDate) throw new Error("endDate must not precede startDate");
   if(!input.description.trim()) throw new Error("Informe uma descrição.");
   if(input.type==="INCOME" && (!input.accountId || input.creditCardId)) throw new Error("Entrada recorrente precisa de uma conta e não pode usar cartão.");
