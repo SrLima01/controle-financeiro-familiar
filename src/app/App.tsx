@@ -14,7 +14,7 @@ import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator"
 import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
 import { assertCents } from "../domain/money/cents";
 import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
-import { createRecurringRule, deactivateRecurringRule, generateRecurringTransactions } from "../domain/recurring/recurring-engine";
+import { createRecurringRule, deactivateRecurringRule, generateRecurringTransactions, validateRecurringRuleUpdate } from "../domain/recurring/recurring-engine";
 import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
 import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
 import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
@@ -279,7 +279,8 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
      if(accountId&&creditCardId) throw new Error("Use conta ou cartão, não ambos.");
      if(editing){
        if(editing.transactionIds.length>0) throw new Error("Esta recorrência já possui lançamentos gerados. Para preservar o histórico, a alteração da série será feita em uma etapa própria.");
-       const replacement=createRecurringRule({description,frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined,active:editing.active});
+       const replacement:RecurringRule={...editing,description:description.trim(),frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined};
+       validateRecurringRuleUpdate(editing,replacement);
        const next={...data,recurringRules:data.recurringRules.map(r=>r.id===editing.id?replacement:r)};
        setBusy(true);await onChange(next);reset();return;
      }
