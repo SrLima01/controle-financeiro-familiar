@@ -6,7 +6,7 @@ import type { EntityCollection } from "../infrastructure/persistence/repository"
 import type { Person, Category } from "../domain/types/entities";
 import { IndexedDbFinanceRepository, hasLegacyDatabase, readLegacyLocalData } from "../infrastructure/persistence/indexeddb";
 import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateAccountUpdate, validateTransaction } from "../domain/transactions/financial-engine";
-import { calculateCardAvailableLimit, calculateCardCreditBalance, calculateCardOutstanding, getCardInvoice, validateCreditCard, validateCreditCardUpdate } from "../domain/cards/card-engine";
+import { calculateCardAvailableLimit, calculateCardCreditBalance, calculateCardOutstanding, getCardInvoice, invoiceClosingDate, invoiceDueDateFromClosing, validateCreditCard, validateCreditCardUpdate } from "../domain/cards/card-engine";
 import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
 import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
 import { pullFinanceState } from "../infrastructure/supabase/sync";
@@ -642,8 +642,32 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
      setBusy(true);setError("");await onChange({...data,transactions:[...data.transactions,tx]});
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível pagar a fatura.")}finally{setBusy(false)}
  }
+ function invoiceRows(c:CreditCard){
+   const today=todayFinancialDate();
+   const currentClosing=invoiceClosingDate(today,c.closingDay);
+   const rows=new Map<string,{closingDate:string;dueDate:string;amountCents:number}>();
+   for(const tx of data.transactions){
+     if(tx.status!=="PAID"||tx.creditCardId!==c.id||tx.type!=="EXPENSE")continue;
+     const closing=invoiceClosingDate(tx.date,c.closingDay);
+     if(closing<currentClosing)continue;
+     const due=invoiceDueDateFromClosing(closing,c.closingDay,c.dueDay);
+     const row=rows.get(closing)??{closingDate:closing,dueDate:due,amountCents:0};
+     row.amountCents+=tx.amountCents;
+     rows.set(closing,row);
+   }
+   const sorted=[...rows.values()].sort((a,b)=>a.closingDate.localeCompare(b.closingDate));
+   const currentIndex=sorted.findIndex(row=>row.closingDate===currentClosing);
+   const result=sorted.slice(Math.max(0,currentIndex)).slice(0,12);
+   return result.length?result:[{closingDate:currentClosing,dueDate:invoiceDueDateFromClosing(currentClosing,c.closingDay,c.dueDay),amountCents:0}];
+ }
+ function invoiceLabel(closingDate:string,index:number){
+   const d=new Date(closingDate+"T12:00:00");
+   const label=d.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+   return index===0 ? `Fatura atual · ${label}` : label.charAt(0).toUpperCase()+label.slice(1);
+ }
  return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Crédito</span><h1>Cartões</h1></div><button className="primary compact" onClick={reset}>+ Novo cartão</button></div>{error&&<div className="global-alert">{error}</div>}
- <section className="card-grid">{data.cards.filter(c=>c.active).length===0?<section className="panel"><Empty text="Nenhum cartão cadastrado."/></section>:data.cards.filter(c=>c.active).map(c=>{const available=calculateCardAvailableLimit(c,data.transactions),outstanding=calculateCardOutstanding(c,data.transactions),credit=calculateCardCreditBalance(c,data.transactions),inv=getCardInvoice(c,data.transactions,todayFinancialDate());return <article className="panel card-item" key={c.id}><div className="card-item-head"><div><strong>{c.name}</strong><span>Fecha dia {c.closingDay} · vence dia {c.dueDay}</span></div><strong>{money(available)}</strong></div><div className="card-metrics"><div><span>Limite</span><strong>{money(c.creditLimitCents)}</strong></div><div><span>Em aberto</span><strong>{money(outstanding)}</strong></div><div><span>Fatura atual</span><strong>{money(inv.openAmountCents)}</strong></div><div><span>Crédito a favor</span><strong>{money(credit)}</strong></div></div><small>Fechamento: {inv.closingDate} · Vencimento: {inv.dueDate}</small><div className="row-actions card-actions"><button className="primary compact" disabled={busy||inv.openAmountCents<=0} onClick={()=>void payInvoice(c)}>Pagar fatura</button><button className="link-button" onClick={()=>edit(c)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(c)}>Arquivar</button></div></article>})}</section>
+ <section className="card-grid">{data.cards.filter(c=>c.active).length===0?<section className="panel"><Empty text="Nenhum cartão cadastrado."/></section>:data.cards.filter(c=>c.active).map(c=>{const available=calculateCardAvailableLimit(c,data.transactions),outstanding=calculateCardOutstanding(c,data.transactions),credit=calculateCardCreditBalance(c,data.transactions),inv=getCardInvoice(c,data.transactions,todayFinancialDate()),rows=invoiceRows(c),expanded=expandedCardId===c.id;return <article className="panel card-item" key={c.id}><div className="card-item-head"><div><strong>{c.name}</strong><span>Fecha dia {c.closingDay} · vence dia {c.dueDay}</span></div><strong>{money(available)}</strong></div><div className="card-metrics"><div><span>Limite</span><strong>{money(c.creditLimitCents)}</strong></div><div><span>Em aberto</span><strong>{money(outstanding)}</strong></div><div><span>Fatura atual</span><strong>{money(inv.openAmountCents)}</strong></div><div><span>Crédito a favor</span><strong>{money(credit)}</strong></div></div><small>Fechamento: {inv.closingDate} · Vencimento: {inv.dueDate}</small><div className="row-actions card-actions"><button className="primary compact" disabled={busy||inv.openAmountCents<=0} onClick={()=>void payInvoice(c)}>Pagar fatura</button><button className="secondary compact" onClick={()=>setExpandedCardId(expanded?null:c.id)}>{expanded?"Ocultar faturas":"Ver faturas"}</button><button className="link-button" onClick={()=>edit(c)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(c)}>Arquivar</button></div>{expanded&&<section className="panel form-panel"><div className="section-title"><div><h2>Faturas</h2><span>Próximas faturas já comprometidas no cartão</span></div></div><div className="account-list">{rows.map((row,index)=><div className="account-row" key={row.closingDate}><div><strong>{invoiceLabel(row.closingDate,index)}</strong><span>Fecha {new Date(row.closingDate+"T12:00:00").toLocaleDateString("pt-BR")} · vence {new Date(row.dueDate+"T12:00:00").toLocaleDateString("pt-BR")}</span></div><strong>{money(row.amountCents)}</strong></div>)}</div><p className="form-note">Os valores futuros são calculados a partir dos lançamentos já registrados. Compras futuras ainda não lançadas não aparecem aqui.</p></section>}</article>})}</section>
+
  <section className="panel form-panel"><h2>{editing?"Editar cartão":"Novo cartão"}</h2><div className="form-grid"><label>Nome<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Visa principal"/></label><label>Conta para pagamento<select value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">Selecione</option>{accounts.filter(a=>a.active||a.id===editing?.accountId).map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label><label>Limite<input inputMode="decimal" value={limit} onChange={e=>setLimit(e.target.value)} placeholder="0,00"/></label><label>Dia de fechamento<input type="number" min="1" max="31" value={closingDay} onChange={e=>setClosingDay(e.target.value)}/></label><label>Dia de vencimento<input type="number" min="1" max="31" value={dueDay} onChange={e=>setDueDay(e.target.value)}/></label></div><div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Criar cartão"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div><p className="form-note">O limite disponível é derivado das compras e pagamentos registrados. O pagamento da fatura sai da conta vinculada.</p></section></div>
 }
 
