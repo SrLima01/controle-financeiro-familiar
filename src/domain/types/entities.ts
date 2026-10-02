@@ -1,0 +1,32 @@
+export type Id=string;
+export type Person={id:Id;name:string;active:boolean};
+export type Category={id:Id;name:string;kind:"INCOME"|"EXPENSE";active:boolean};
+export type AccountType="CHECKING"|"SAVINGS"|"DIGITAL"|"CASH"|"INVESTMENT";
+export type Account={id:Id;name:string;type:AccountType;openingBalanceCents:number;active:boolean};
+export type CreditCard={id:Id;name:string;accountId:Id;creditLimitCents:number;closingDay:number;dueDay:number;active:boolean};
+export type TransactionType="INCOME"|"EXPENSE"|"TRANSFER"|"CARD_PAYMENT";
+export type TransactionStatus="PENDING"|"PAID"|"RECEIVED"|"PLANNED"|"CANCELLED";
+export type Transaction={id:Id;date:string;type:TransactionType;status:TransactionStatus;amountCents:number;description:string;personId?:Id;categoryId?:Id;accountId?:Id;destinationAccountId?:Id;creditCardId?:Id;installmentGroupId?:Id};
+export type InstallmentGroup={id:Id;description:string;totalAmountCents:number;installmentCount:number;firstDate:string;transactionIds:Id[]};
+export type RecurringFrequency="WEEKLY"|"BIWEEKLY"|"MONTHLY"|"BIMONTHLY"|"QUARTERLY"|"SEMIANNUAL"|"ANNUAL";
+export type RecurringRule={
+  id:Id;
+  description:string;
+  frequency:RecurringFrequency;
+  startDate:string;
+  endDate?:string;
+  amountCents:number;
+  type:"INCOME"|"EXPENSE";
+  status:"PENDING"|"PAID"|"RECEIVED"|"PLANNED";
+  categoryId?:Id;
+  accountId?:Id;
+  creditCardId?:Id;
+  personId?:Id;
+  transactionIds:Id[];
+  active:boolean;
+};
+export type PotMovementType="DEPOSIT"|"WITHDRAWAL";
+export type Pot={id:Id;name:string;targetCents:number;active:boolean};
+export type PotMovement={id:Id;potId:Id;type:PotMovementType;amountCents:number;date:string;description:string};
+
+export type Budget={id:Id;month:string;categoryId:Id;limitCents:number;active:boolean};
