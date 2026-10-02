@@ -627,7 +627,7 @@ function More({data,family,onChange,onSignOut}:{data:EntityCollection;family:Fam
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
- const [editing,setEditing]=useState<CreditCard|null>(null),[name,setName]=useState(""),[accountId,setAccountId]=useState(""),[limit,setLimit]=useState(""),[closingDay,setClosingDay]=useState("10"),[dueDay,setDueDay]=useState("20"),[busy,setBusy]=useState(false),[error,setError]=useState(""),[expandedCardId,setExpandedCardId]=useState<string|null>(null);
+ const [editing,setEditing]=useState<CreditCard|null>(null),[name,setName]=useState(""),[accountId,setAccountId]=useState(""),[limit,setLimit]=useState(""),[closingDay,setClosingDay]=useState("10"),[dueDay,setDueDay]=useState("20"),[busy,setBusy]=useState(false),[error,setError]=useState(""),[expandedCardId,setExpandedCardId]=useState<string|null>(null),[selectedInvoiceByCard,setSelectedInvoiceByCard]=useState<Record<string,string>>({});
  const accounts=data.accounts;
  function reset(){setEditing(null);setName("");setAccountId("");setLimit("");setClosingDay("10");setDueDay("20");setError("")}
  function edit(c:CreditCard){setEditing(c);setName(c.name);setAccountId(c.accountId);setLimit((c.creditLimitCents/100).toFixed(2).replace(".",","));setClosingDay(String(c.closingDay));setDueDay(String(c.dueDay));setError("")}
@@ -637,15 +637,12 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
    const invoice=getCardInvoice(c,data.transactions,todayFinancialDate());
    if(invoice.openAmountCents<=0){setError("Não há valor em aberto na fatura atual.");return}
    const tx:Transaction={id:crypto.randomUUID(),date:todayFinancialDate(),type:"CARD_PAYMENT",status:"PAID",amountCents:invoice.openAmountCents,description:`Pagamento da fatura — ${c.name}`,accountId:c.accountId,creditCardId:c.id};
-   try{
-     validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});
-     setBusy(true);setError("");await onChange({...data,transactions:[...data.transactions,tx]});
-   }catch(e){setError(e instanceof Error?e.message:"Não foi possível pagar a fatura.")}finally{setBusy(false)}
+   try{validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});setBusy(true);setError("");await onChange({...data,transactions:[...data.transactions,tx]})}catch(e){setError(e instanceof Error?e.message:"Não foi possível pagar a fatura.")}finally{setBusy(false)}
  }
  function invoiceRows(c:CreditCard){
    const today=todayFinancialDate();
    const currentClosing=invoiceClosingDate(today,c.closingDay);
-   const rows=new Map<string,{closingDate:string;dueDate:string;amountCents:number}>();
+   const rows=new Map<string,{closingDate:string;dueDate:string;amountCents:number;transactions:Transaction[]}>();
    const allocations=allocateCardPayments(c,data.transactions);
    const allocatedByClosing=new Map<string,number>();
    for(const allocation of allocations) allocatedByClosing.set(allocation.closingDate,(allocatedByClosing.get(allocation.closingDate)??0)+allocation.amountCents);
@@ -654,27 +651,41 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
      const closing=invoiceClosingDate(tx.date,c.closingDay);
      if(closing<currentClosing)continue;
      const due=invoiceDueDateFromClosing(closing,c.closingDay,c.dueDay);
-     const row=rows.get(closing)??{closingDate:closing,dueDate:due,amountCents:0};
+     const row=rows.get(closing)??{closingDate:closing,dueDate:due,amountCents:0,transactions:[]};
      row.amountCents+=tx.amountCents;
+     row.transactions.push(tx);
      rows.set(closing,row);
    }
-   for(const row of rows.values()) row.amountCents=Math.max(0,row.amountCents-(allocatedByClosing.get(row.closingDate)??0));
+   for(const row of rows.values()){
+     row.amountCents=Math.max(0,row.amountCents-(allocatedByClosing.get(row.closingDate)??0));
+     row.transactions.sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+   }
    const sorted=[...rows.values()].sort((a,b)=>a.closingDate.localeCompare(b.closingDate));
    const currentIndex=sorted.findIndex(row=>row.closingDate===currentClosing);
-   const result=sorted.slice(Math.max(0,currentIndex)).slice(0,12);
-   return result.length?result:[{closingDate:currentClosing,dueDate:invoiceDueDateFromClosing(currentClosing,c.closingDay,c.dueDay),amountCents:0}];
+   const result=sorted.slice(Math.max(0,currentIndex));
+   const known=new Set(result.map(row=>row.closingDate));
+   const current=new Date(currentClosing+"T12:00:00");
+   for(let i=0;result.length<12;i++){
+     const d=new Date(current.getFullYear(),current.getMonth()+i,current.getDate());
+     const closing=invoiceClosingDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(Math.min(d.getDate(),28)).padStart(2,"0")}`,c.closingDay);
+     if(known.has(closing))continue;
+     result.push({closingDate:closing,dueDate:invoiceDueDateFromClosing(closing,c.closingDay,c.dueDay),amountCents:0,transactions:[]});
+     known.add(closing);
+   }
+   return result.slice(0,12).sort((a,b)=>a.closingDate.localeCompare(b.closingDate));
  }
  function invoiceLabel(closingDate:string,index:number){
    const d=new Date(closingDate+"T12:00:00");
    const label=d.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
    return index===0 ? `Fatura atual · ${label}` : label.charAt(0).toUpperCase()+label.slice(1);
  }
+ function selectInvoice(c:CreditCard,rows:ReturnType<typeof invoiceRows>){
+   return selectedInvoiceByCard[c.id]&&rows.some(row=>row.closingDate===selectedInvoiceByCard[c.id]) ? selectedInvoiceByCard[c.id] : rows[0]?.closingDate;
+ }
  return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Crédito</span><h1>Cartões</h1></div><button className="primary compact" onClick={reset}>+ Novo cartão</button></div>{error&&<div className="global-alert">{error}</div>}
- <section className="card-grid">{data.cards.filter(c=>c.active).length===0?<section className="panel"><Empty text="Nenhum cartão cadastrado."/></section>:data.cards.filter(c=>c.active).map(c=>{const available=calculateCardAvailableLimit(c,data.transactions),outstanding=calculateCardOutstanding(c,data.transactions),credit=calculateCardCreditBalance(c,data.transactions),inv=getCardInvoice(c,data.transactions,todayFinancialDate()),rows=invoiceRows(c),expanded=expandedCardId===c.id;return <article className="panel card-item" key={c.id}><div className="card-item-head"><div><strong>{c.name}</strong><span>Fecha dia {c.closingDay} · vence dia {c.dueDay}</span></div><strong>{money(available)}</strong></div><div className="card-metrics"><div><span>Limite</span><strong>{money(c.creditLimitCents)}</strong></div><div><span>Em aberto</span><strong>{money(outstanding)}</strong></div><div><span>Fatura atual</span><strong>{money(inv.openAmountCents)}</strong></div><div><span>Crédito a favor</span><strong>{money(credit)}</strong></div></div><small>Fechamento: {inv.closingDate} · Vencimento: {inv.dueDate}</small><div className="row-actions card-actions"><button className="primary compact" disabled={busy||inv.openAmountCents<=0} onClick={()=>void payInvoice(c)}>Pagar fatura</button><button className="secondary compact" onClick={()=>setExpandedCardId(expanded?null:c.id)}>{expanded?"Ocultar faturas":"Ver faturas"}</button><button className="link-button" onClick={()=>edit(c)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(c)}>Arquivar</button></div>{expanded&&<section className="panel form-panel"><div className="section-title"><div><h2>Faturas</h2><span>Próximas faturas já comprometidas no cartão</span></div></div><div className="account-list">{rows.map((row,index)=><div className="account-row" key={row.closingDate}><div><strong>{invoiceLabel(row.closingDate,index)}</strong><span>Fecha {new Date(row.closingDate+"T12:00:00").toLocaleDateString("pt-BR")} · vence {new Date(row.dueDate+"T12:00:00").toLocaleDateString("pt-BR")}</span></div><strong>{money(row.amountCents)}</strong></div>)}</div><p className="form-note">Os valores futuros são calculados a partir dos lançamentos já registrados. Compras futuras ainda não lançadas não aparecem aqui.</p></section>}</article>})}</section>
-
+ <section className="card-grid">{data.cards.filter(c=>c.active).length===0?<section className="panel"><Empty text="Nenhum cartão cadastrado."/></section>:data.cards.filter(c=>c.active).map(c=>{const available=calculateCardAvailableLimit(c,data.transactions),outstanding=calculateCardOutstanding(c,data.transactions),credit=calculateCardCreditBalance(c,data.transactions),inv=getCardInvoice(c,data.transactions,todayFinancialDate()),rows=invoiceRows(c),selectedClosing=selectInvoice(c,rows),selected=rows.find(row=>row.closingDate===selectedClosing)??rows[0],expanded=expandedCardId===c.id;return <article className="panel card-item" key={c.id}><div className="card-item-head"><div><strong>{c.name}</strong><span>Fecha dia {c.closingDay} · vence dia {c.dueDay}</span></div><strong>{money(available)}</strong></div><div className="card-metrics"><div><span>Limite</span><strong>{money(c.creditLimitCents)}</strong></div><div><span>Em aberto</span><strong>{money(outstanding)}</strong></div><div><span>Fatura atual</span><strong>{money(inv.openAmountCents)}</strong></div><div><span>Crédito a favor</span><strong>{money(credit)}</strong></div></div><small>Fechamento: {inv.closingDate} · Vencimento: {inv.dueDate}</small><div className="row-actions card-actions"><button className="primary compact" disabled={busy||inv.openAmountCents<=0} onClick={()=>void payInvoice(c)}>Pagar fatura</button><button className="secondary compact" onClick={()=>setExpandedCardId(expanded?null:c.id)}>{expanded?"Ocultar faturas":"Ver faturas"}</button><button className="link-button" onClick={()=>edit(c)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(c)}>Arquivar</button></div>{expanded&&<section className="panel form-panel"><div className="section-title"><div><h2>Consultar fatura por mês</h2><span>Veja quanto está comprometido e quais lançamentos formam cada mês.</span></div></div><label>Mês da fatura<select value={selectedClosing??""} onChange={e=>setSelectedInvoiceByCard(prev=>({...prev,[c.id]:e.target.value}))}>{rows.map((row,index)=><option key={row.closingDate} value={row.closingDate}>{invoiceLabel(row.closingDate,index)} — {money(row.amountCents)}</option>)}</select></label>{selected&&<><div className="hero-card"><span>Total a pagar neste mês</span><strong>{money(selected.amountCents)}</strong><small>Fecha {new Date(selected.closingDate+"T12:00:00").toLocaleDateString("pt-BR")} · vence {new Date(selected.dueDate+"T12:00:00").toLocaleDateString("pt-BR")}</small></div><div className="section-title"><h3>Lançamentos</h3><span>{selected.transactions.length} lançamento(s)</span></div>{selected.transactions.length===0?<Empty text="Nenhum lançamento previsto para este mês."/>:<div className="account-list">{selected.transactions.map(tx=><div className="account-row" key={tx.id}><div><strong>{tx.description||"Compra no cartão"}</strong><span>{new Date(tx.date+"T12:00:00").toLocaleDateString("pt-BR")}{tx.installmentGroupId? ` · Parcela ${getInstallmentNumber(tx.id,data.transactions)}`:""}</span></div><strong>{money(tx.amountCents)}</strong></div>)}</div>}<p className="form-note">O total considera pagamentos já alocados. Parcelas futuras já lançadas aparecem no mês correspondente; compras ainda não lançadas não aparecem.</p></>}</section>}</article>})}</section>
  <section className="panel form-panel"><h2>{editing?"Editar cartão":"Novo cartão"}</h2><div className="form-grid"><label>Nome<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Visa principal"/></label><label>Conta para pagamento<select value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">Selecione</option>{accounts.filter(a=>a.active||a.id===editing?.accountId).map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label><label>Limite<input inputMode="decimal" value={limit} onChange={e=>setLimit(e.target.value)} placeholder="0,00"/></label><label>Dia de fechamento<input type="number" min="1" max="31" value={closingDay} onChange={e=>setClosingDay(e.target.value)}/></label><label>Dia de vencimento<input type="number" min="1" max="31" value={dueDay} onChange={e=>setDueDay(e.target.value)}/></label></div><div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Criar cartão"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div><p className="form-note">O limite disponível é derivado das compras e pagamentos registrados. O pagamento da fatura sai da conta vinculada.</p></section></div>
 }
-
 
 function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Family;onSignOut:()=>Promise<void>;onSwitchFamily:()=>void}) {
   const [page,setPage]=useState<Page>("dashboard");
