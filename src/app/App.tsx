@@ -6,7 +6,7 @@ import type { EntityCollection } from "../infrastructure/persistence/repository"
 import type { Person, Category } from "../domain/types/entities";
 import { IndexedDbFinanceRepository, hasLegacyDatabase, readLegacyLocalData } from "../infrastructure/persistence/indexeddb";
 import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateAccountUpdate, validateTransaction } from "../domain/transactions/financial-engine";
-import { calculateCardAvailableLimit, calculateCardCreditBalance, calculateCardOutstanding, getCardInvoice, invoiceClosingDate, invoiceDueDateFromClosing, validateCreditCard, validateCreditCardUpdate } from "../domain/cards/card-engine";
+import { calculateCardAvailableLimit, calculateCardCreditBalance, calculateCardOutstanding, getCardInvoice, allocateCardPayments, invoiceClosingDate, invoiceDueDateFromClosing, validateCreditCard, validateCreditCardUpdate } from "../domain/cards/card-engine";
 import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
 import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
 import { pullFinanceState } from "../infrastructure/supabase/sync";
@@ -627,7 +627,7 @@ function More({data,family,onChange,onSignOut}:{data:EntityCollection;family:Fam
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
- const [editing,setEditing]=useState<CreditCard|null>(null),[name,setName]=useState(""),[accountId,setAccountId]=useState(""),[limit,setLimit]=useState(""),[closingDay,setClosingDay]=useState("10"),[dueDay,setDueDay]=useState("20"),[busy,setBusy]=useState(false),[error,setError]=useState("");
+ const [editing,setEditing]=useState<CreditCard|null>(null),[name,setName]=useState(""),[accountId,setAccountId]=useState(""),[limit,setLimit]=useState(""),[closingDay,setClosingDay]=useState("10"),[dueDay,setDueDay]=useState("20"),[busy,setBusy]=useState(false),[error,setError]=useState(""),[expandedCardId,setExpandedCardId]=useState<string|null>(null);
  const accounts=data.accounts;
  function reset(){setEditing(null);setName("");setAccountId("");setLimit("");setClosingDay("10");setDueDay("20");setError("")}
  function edit(c:CreditCard){setEditing(c);setName(c.name);setAccountId(c.accountId);setLimit((c.creditLimitCents/100).toFixed(2).replace(".",","));setClosingDay(String(c.closingDay));setDueDay(String(c.dueDay));setError("")}
@@ -646,6 +646,9 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
    const today=todayFinancialDate();
    const currentClosing=invoiceClosingDate(today,c.closingDay);
    const rows=new Map<string,{closingDate:string;dueDate:string;amountCents:number}>();
+   const allocations=allocateCardPayments(c,data.transactions);
+   const allocatedByClosing=new Map<string,number>();
+   for(const allocation of allocations) allocatedByClosing.set(allocation.closingDate,(allocatedByClosing.get(allocation.closingDate)??0)+allocation.amountCents);
    for(const tx of data.transactions){
      if(tx.status!=="PAID"||tx.creditCardId!==c.id||tx.type!=="EXPENSE")continue;
      const closing=invoiceClosingDate(tx.date,c.closingDay);
@@ -655,6 +658,7 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
      row.amountCents+=tx.amountCents;
      rows.set(closing,row);
    }
+   for(const row of rows.values()) row.amountCents=Math.max(0,row.amountCents-(allocatedByClosing.get(row.closingDate)??0));
    const sorted=[...rows.values()].sort((a,b)=>a.closingDate.localeCompare(b.closingDate));
    const currentIndex=sorted.findIndex(row=>row.closingDate===currentClosing);
    const result=sorted.slice(Math.max(0,currentIndex)).slice(0,12);
