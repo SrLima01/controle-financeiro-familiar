@@ -193,7 +193,8 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
        reset();
        return;
      }
-     const tx:Transaction={id:editing?.id??crypto.randomUUID(),date,type,status,amountCents,description:description.trim(),...(categoryId?{categoryId}:{}),...(accountId?{accountId}:{}),...(destinationAccountId?{destinationAccountId}:{}),...(creditCardId?{creditCardId}:{}),...(personId?{personId}: {})};
+     const transactionDescription=description.trim() || (type==="TRANSFER" ? "Transferência" : "");
+     const tx:Transaction={id:editing?.id??crypto.randomUUID(),date,type,status,amountCents,description:transactionDescription,...(categoryId?{categoryId}:{}),...(accountId?{accountId}:{}),...(destinationAccountId?{destinationAccountId}:{}),...(creditCardId?{creditCardId}:{}),...(personId?{personId}: {})};
      if(type==="EXPENSE"&&creditCardId){
        const card=data.cards.find(c=>c.id===creditCardId); if(!card) throw new Error("Cartão inválido.");
        const available=calculateCardAvailableLimit(card,data.transactions)+(editing?.creditCardId===card.id&&editing.type==="EXPENSE"?editing.amountCents:0);
