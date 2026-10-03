@@ -95,7 +95,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
   </section></main>;
 }
 
-function Dashboard({data,onQuickAction}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt")=>void}) {
+function Dashboard({data,onQuickAction}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt"|"manual")=>void}) {
   const real=useMemo(()=>calculateTotalRealBalance({accounts:data.accounts,cards:data.cards,transactions:data.transactions}),[data]);
   const projected=useMemo(()=>data.accounts.filter(a=>a.active).reduce((s,a)=>s+calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}),0),[data]);
   const pending=data.transactions.filter(t=>t.status==="PENDING"||t.status==="PLANNED").reduce((s,t)=>s+(t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0);
@@ -104,7 +104,7 @@ function Dashboard({data,onQuickAction}:{data:EntityCollection;onQuickAction:(mo
     <section className="quick-actions">
       <button className="quick-action quick-action-primary" onClick={()=>onQuickAction("smart")}><span className="quick-action-icon" aria-hidden="true">🎙</span><span><strong>Lançar com áudio</strong><small>Fale o gasto e revise antes de salvar</small></span><b aria-hidden="true">›</b></button>
       <button className="quick-action" onClick={()=>onQuickAction("receipt")}><span className="quick-action-icon" aria-hidden="true">📷</span><span><strong>Fotografar recibo</strong><small>Leia o valor e confira o lançamento</small></span><b aria-hidden="true">›</b></button>
-      <button className="quick-action" onClick={()=>onQuickAction("smart")}><span className="quick-action-icon" aria-hidden="true">＋</span><span><strong>Novo lançamento</strong><small>Digite e registre uma movimentação</small></span><b aria-hidden="true">›</b></button>
+      <button className="quick-action" onClick={()=>onQuickAction("manual")}><span className="quick-action-icon" aria-hidden="true">＋</span><span><strong>Novo lançamento</strong><small>Digite e registre uma movimentação</small></span><b aria-hidden="true">›</b></button>
     </section>
     <section className="hero-card"><span>Saldo total real</span><strong>{money(real)}</strong><small>Somente movimentos pagos/recebidos.</small></section>
     <div className="metric-grid"><article className="metric"><span>Projetado</span><strong>{money(projected)}</strong><small>Considera lançamentos futuros.</small></article><article className="metric"><span>Movimentos pendentes</span><strong>{money(pending)}</strong><small>Impacto ainda não realizado.</small></article></div>
@@ -695,7 +695,10 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
 function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Family;onSignOut:()=>Promise<void>;onSwitchFamily:()=>void}) {
   const [page,setPage]=useState<Page>("dashboard");
   const [quickMode,setQuickMode]=useState<"smart"|"receipt">("smart");
-  function openQuickAction(mode:"smart"|"receipt"){setQuickMode(mode);setPage("mais")}
+  function openQuickAction(mode:"smart"|"receipt"|"manual"){
+    if(mode==="manual"){setPage("transacoes");return}
+    setQuickMode(mode);setPage("mais")
+  }
   const [data,setData]=useState<EntityCollection>(emptyData);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
