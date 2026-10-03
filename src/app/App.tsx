@@ -95,12 +95,17 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
   </section></main>;
 }
 
-function Dashboard({data}:{data:EntityCollection}) {
+function Dashboard({data,onQuickAction}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt")=>void}) {
   const real=useMemo(()=>calculateTotalRealBalance({accounts:data.accounts,cards:data.cards,transactions:data.transactions}),[data]);
   const projected=useMemo(()=>data.accounts.filter(a=>a.active).reduce((s,a)=>s+calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}),0),[data]);
   const pending=data.transactions.filter(t=>t.status==="PENDING"||t.status==="PLANNED").reduce((s,t)=>s+(t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0);
   return <div className="page-content">
     <div className="page-heading"><div><span className="eyebrow">{todayMonth()}</span><h1>Visão geral</h1></div><span className="sync-dot">Local</span></div>
+    <section className="quick-actions">
+      <button className="quick-action quick-action-primary" onClick={()=>onQuickAction("smart")}><span className="quick-action-icon" aria-hidden="true">🎙</span><span><strong>Lançar com áudio</strong><small>Fale o gasto e revise antes de salvar</small></span><b aria-hidden="true">›</b></button>
+      <button className="quick-action" onClick={()=>onQuickAction("receipt")}><span className="quick-action-icon" aria-hidden="true">📷</span><span><strong>Fotografar recibo</strong><small>Leia o valor e confira o lançamento</small></span><b aria-hidden="true">›</b></button>
+      <button className="quick-action" onClick={()=>onQuickAction("smart")}><span className="quick-action-icon" aria-hidden="true">＋</span><span><strong>Novo lançamento</strong><small>Digite e registre uma movimentação</small></span><b aria-hidden="true">›</b></button>
+    </section>
     <section className="hero-card"><span>Saldo total real</span><strong>{money(real)}</strong><small>Somente movimentos pagos/recebidos.</small></section>
     <div className="metric-grid"><article className="metric"><span>Projetado</span><strong>{money(projected)}</strong><small>Considera lançamentos futuros.</small></article><article className="metric"><span>Movimentos pendentes</span><strong>{money(pending)}</strong><small>Impacto ainda não realizado.</small></article></div>
     <section className="panel"><div className="section-title"><h2>Contas</h2><span>{data.accounts.filter(a=>a.active).length} ativas</span></div>
@@ -536,8 +541,8 @@ function ReceiptScanner({data,onChange}:{data:EntityCollection;onChange:(next:En
  return <div className="page-content">
   <div className="page-heading"><div><span className="eyebrow">OCR local</span><h1>Ler recibo</h1></div></div>
   <section className="panel form-panel">
-   <p className="muted">Fotografe o recibo. A leitura é feita no dispositivo e o resultado fica apenas como rascunho até sua confirmação.</p>
-   <label className="file-capture">Tirar foto ou escolher recibo<input type="file" accept="image/*" capture="environment" disabled={busy} onChange={e=>{const file=e.target.files?.[0];if(file)void scan(file)}}/></label>
+   <p className="muted">Aponte a câmera para o recibo, tente deixar o papel inteiro visível e evite sombras. A leitura é feita no dispositivo e o resultado fica apenas como rascunho até sua confirmação.</p>
+   <label className="file-capture"><span>📷 Tirar foto do recibo</span><input type="file" accept="image/jpeg,image/png,image/webp,image/*" capture="environment" disabled={busy} onChange={e=>{const file=e.target.files?.[0];if(file)void scan(file)}}/></label>
    {busy&&<p className="form-note">Lendo recibo… {Math.round(progress*100)}%</p>}
    {confidence!==null&&<p className="form-note">Confiança média do OCR: {Math.round(confidence)}%. Isso não significa que os campos financeiros estejam corretos.</p>}
    {error&&<div className="global-alert">{error}</div>}
@@ -621,8 +626,8 @@ function People({data,onChange}:{data:EntityCollection;onChange:(next:EntityColl
  </div>;
 }
 
-function More({data,family,onChange,onSignOut}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
- const [section,setSection]=useState<"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"categories"|"settings">("smart");
+function More({data,family,onChange,onSignOut,defaultSection="smart"}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;defaultSection?:"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"categories"|"settings"}) {
+ const [section,setSection]=useState<"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"categories"|"settings">(defaultSection);
  return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="receipt"?"active":""} onClick={()=>setSection("receipt")}>Ler recibo</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="people"?"active":""} onClick={()=>setSection("people")}>Pessoas</button><button className={section==="categories"?"active":""} onClick={()=>setSection("categories")}>Categorias</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:section==="people"?<People data={data} onChange={onChange}/>:section==="categories"?<Categories data={data} onChange={onChange}/>:<Settings data={data} family={family} onChange={onChange} onSignOut={onSignOut}/>}</>;
 }
 
@@ -689,6 +694,8 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
 
 function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Family;onSignOut:()=>Promise<void>;onSwitchFamily:()=>void}) {
   const [page,setPage]=useState<Page>("dashboard");
+  const [quickMode,setQuickMode]=useState<"smart"|"receipt">("smart");
+  function openQuickAction(mode:"smart"|"receipt"){setQuickMode(mode);setPage("mais")}
   const [data,setData]=useState<EntityCollection>(emptyData);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
@@ -786,11 +793,11 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     }
     setError("O estado online mudou novamente. Atualize a tela e resolva o novo conflito.");
   }
-  const content = page==="dashboard" ? <Dashboard data={data}/> :
+  const content = page==="dashboard" ? <Dashboard data={data} onQuickAction={openQuickAction}/> :
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
-    page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut}/> : page==="relatorios" ? <Reports data={data}/> :
+    page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode}/> : page==="relatorios" ? <Reports data={data}/> :
     <Dashboard data={data}/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar família</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
