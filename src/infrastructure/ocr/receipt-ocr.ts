@@ -108,7 +108,6 @@ export function extractReceiptTotal(text:string): number | null {
 
   const all=lines.flatMap(parseMoneyCandidates);
   if(all.length===1) return all[0];
-  if(all.length>1) return Math.max(...all);
   return null;
 }
 
