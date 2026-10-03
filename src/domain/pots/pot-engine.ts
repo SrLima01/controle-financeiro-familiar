@@ -28,6 +28,8 @@ export function createPotMovement(data:EntityCollection,input:Omit<PotMovement,"
   return {...data,potMovements:[...data.potMovements,movement]};
 }
 export function archivePot(data:EntityCollection,potId:string):EntityCollection{
-  if(!data.pots.some(p=>p.id===potId))throw new Error("Caixinha não encontrada.");
+  const pot=data.pots.find(p=>p.id===potId);
+  if(!pot)throw new Error("Caixinha não encontrada.");
+  if(getPotBalance(pot.id,data)>0)throw new Error("Não é possível arquivar uma caixinha com saldo. Resgate o valor antes de arquivar.");
   return {...data,pots:data.pots.map(p=>p.id===potId?{...p,active:false}:p)};
 }
