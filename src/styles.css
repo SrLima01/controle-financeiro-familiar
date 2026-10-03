@@ -19,3 +19,19 @@
 .voice-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}.voice-actions .form-note{margin:0}
 \n.sync-conflict{margin:12px auto;width:min(900px,calc(100% - 32px));border-left:4px solid #b7791f}.sync-conflict p{margin:7px 0 12px;color:#697386;font-size:13px;line-height:1.45}.sync-conflict .form-actions{display:flex;gap:8px;flex-wrap:wrap}\n
 .report-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.segmented-control{display:flex;gap:4px;padding:4px;border:1px solid #e7eaf0;border-radius:10px;background:#fff}.segmented-control button{border:0;background:transparent;padding:7px 11px;border-radius:7px;cursor:pointer;color:inherit}.segmented-control button.active{background:#415a9b;color:#fff}
+
+
+/* Ações rápidas da tela inicial */
+.quick-actions{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:14px}
+.quick-action{display:flex;align-items:center;gap:12px;width:100%;padding:14px 15px;border:1px solid var(--border,#dfe3e8);border-radius:16px;background:var(--surface,#fff);color:inherit;text-align:left;cursor:pointer;box-shadow:0 2px 8px rgba(20,30,40,.04)}
+.quick-action:hover{transform:translateY(-1px)}
+.quick-action:focus-visible{outline:3px solid rgba(37,99,235,.22);outline-offset:2px}
+.quick-action-primary{border-color:rgba(37,99,235,.22)}
+.quick-action-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:rgba(37,99,235,.09);font-size:20px;flex:0 0 42px}
+.quick-action span:nth-child(2){display:flex;flex-direction:column;gap:3px;flex:1}
+.quick-action strong{font-size:15px}
+.quick-action small{color:var(--muted,#68717d);line-height:1.35}
+.quick-action b{font-size:22px;color:var(--muted,#68717d);font-weight:400}
+.file-capture{display:flex;align-items:center;justify-content:center;min-height:54px;border:1px dashed #aeb7c2;border-radius:14px;padding:12px;text-align:center;cursor:pointer;font-weight:700}
+.file-capture input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+@media (min-width:720px){.quick-actions{grid-template-columns:repeat(3,1fr)}.quick-action{min-height:96px}}
