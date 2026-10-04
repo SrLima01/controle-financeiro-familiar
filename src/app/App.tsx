@@ -156,7 +156,7 @@ const CATEGORY_NAME_EMOJIS:Record<string,string>={
  "alimentação":"🍔","alimentacao":"🍔","mercado":"🛒","moradia":"🏠","transporte":"🚗","saúde":"💊","saude":"💊",
  "educação":"🎓","educacao":"🎓","vestuário":"👕","vestuario":"👕","lazer":"🎮","contas da casa":"💡",
  "assinaturas":"📱","investimentos":"💰","pets":"🐶","filhos":"👶","bens":"📦","serviços":"🔧","servicos":"🔧",
- "educação":"🎓","presentes":"🎁","viagem":"✈️","cartão":"💳","cartao":"💳","salário":"💰","salario":"💰"
+ "presentes":"🎁","viagem":"✈️","cartão":"💳","cartao":"💳","salário":"💰","salario":"💰"
 };
 function categoryEmojiForName(name:string){return CATEGORY_NAME_EMOJIS[name.trim().toLocaleLowerCase("pt-BR")]??"🏷️";}
 function normalizeCategoryEmojis(categories:Category[]):Category[]{
