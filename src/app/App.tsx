@@ -151,6 +151,17 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
 function parseAmount(value:string):number{const cents=parseSmartAmount(value);if(cents===null)throw new Error("Informe um valor válido.");assertCents(cents,"amountCents");return cents}
 
 const CATEGORY_EMOJIS=["🏷️","🛒","🍔","🏠","🚗","💊","🎓","👕","🎮","💡","📱","💰","🐶","👶","📦","🔧","📚","🎁","✈️"];
+const CATEGORY_CREATE_VALUE="__CREATE_CATEGORY__";
+const CATEGORY_NAME_EMOJIS:Record<string,string>={
+ "alimentação":"🍔","alimentacao":"🍔","mercado":"🛒","moradia":"🏠","transporte":"🚗","saúde":"💊","saude":"💊",
+ "educação":"🎓","educacao":"🎓","vestuário":"👕","vestuario":"👕","lazer":"🎮","contas da casa":"💡",
+ "assinaturas":"📱","investimentos":"💰","pets":"🐶","filhos":"👶","bens":"📦","serviços":"🔧","servicos":"🔧",
+ "educação":"🎓","presentes":"🎁","viagem":"✈️","cartão":"💳","cartao":"💳","salário":"💰","salario":"💰"
+};
+function categoryEmojiForName(name:string){return CATEGORY_NAME_EMOJIS[name.trim().toLocaleLowerCase("pt-BR")]??"🏷️";}
+function normalizeCategoryEmojis(categories:Category[]):Category[]{
+ return categories.map(c=>c.emoji?c:{...c,emoji:categoryEmojiForName(c.name)});
+}
 
 function QuickCategoryCreate({kind,data,onChange,onCreated,onCancel}:{kind:Category["kind"];data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onCreated:(category:Category)=>void;onCancel:()=>void}) {
  const [name,setName]=useState("");
@@ -270,7 +281,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
      <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} disabled={recurringGenerated} required/></label>
      <label>Valor total<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00" required/></label>
      <label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: Mercado"/></label>
-     {(type==="INCOME"||type==="EXPENSE")&&<div className="category-field"><label>Categoria<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Selecione</option>{data.categories.filter(c=>(c.active&&c.kind===(type==="INCOME"?"INCOME":"EXPENSE"))||c.id===editing?.categoryId).map(c=><option key={c.id} value={c.id}>{c.emoji??"🏷️"} {c.name}{c.active?"":" (arquivada)"}</option>)}</select></label><button type="button" className="secondary compact category-add-button" onClick={()=>setCreatingCategory(v=>!v)}>＋ Criar categoria</button>{creatingCategory&&<QuickCategoryCreate kind={type==="INCOME"?"INCOME":"EXPENSE"} data={data} onChange={onChange} onCreated={category=>{setCategoryId(category.id);setCreatingCategory(false);}} onCancel={()=>setCreatingCategory(false)}/>}</div>}
+     {(type==="INCOME"||type==="EXPENSE")&&<div className="category-field"><label>Categoria<select value={categoryId} onChange={e=>{if(e.target.value===CATEGORY_CREATE_VALUE){setCreatingCategory(true);return;}setCategoryId(e.target.value)}}><option value="">Selecione</option>{data.categories.filter(c=>(c.active&&c.kind===(type==="INCOME"?"INCOME":"EXPENSE"))||c.id===editing?.categoryId).map(c=><option key={c.id} value={c.id}>{c.emoji??categoryEmojiForName(c.name)} {c.name}{c.active?"":" (arquivada)"}</option>)}<option value={CATEGORY_CREATE_VALUE}>＋ Criar nova categoria…</option></select></label><button type="button" className="secondary compact category-add-button" onClick={()=>setCreatingCategory(v=>!v)}>＋ Criar nova categoria</button>{creatingCategory&&<QuickCategoryCreate kind={type==="INCOME"?"INCOME":"EXPENSE"} data={data} onChange={onChange} onCreated={category=>{setCategoryId(category.id);setCreatingCategory(false);}} onCancel={()=>setCreatingCategory(false)}/>}</div>}
      <label>{type==="TRANSFER"?"Conta de origem":type==="CARD_PAYMENT"?"Conta de pagamento":"Conta"}<select value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value&&type!=="CARD_PAYMENT")setCreditCardId("")}} disabled={type==="CARD_PAYMENT"&&!!creditCardId}><option value="">Selecione</option>{(type==="CARD_PAYMENT"&&creditCardId?data.accounts.filter(a=>a.id===data.cards.find(c=>c.id===creditCardId)?.accountId ):transactionAccountOptions).map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label>
      {type==="TRANSFER"&&<label>Conta de destino<select value={destinationAccountId} onChange={e=>setDestinationAccountId(e.target.value)}><option value="">Selecione</option>{transactionAccountOptions.map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label>}
      {type==="EXPENSE"&&<label>Cartão de crédito (opcional)<select value={creditCardId} onChange={e=>{setCreditCardId(e.target.value);if(e.target.value)setAccountId("")}}><option value="">Nenhum / conta</option>{transactionCardOptions.map(c=><option key={c.id} value={c.id}>{c.name}{c.active?"":" (arquivado)"}</option>)}</select></label>}
@@ -747,8 +758,10 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
         if (!localStorage.getItem(`legacy-migration-completed-${family.id}`) && !localStorage.getItem(`legacy-migration-dismissed-${family.id}`) && await hasLegacyDatabase()) {
           try { const oldData = await readLegacyLocalData(); if (!cancelled) setLegacyData(oldData); } catch {}
         }
-        const local:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules"),pots:await repo.list("pots"),potMovements:await repo.list("potMovements"),budgets:await repo.list("budgets")};
+        const rawLocal:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules"),pots:await repo.list("pots"),potMovements:await repo.list("potMovements"),budgets:await repo.list("budgets")};
+        const local:EntityCollection={...rawLocal,categories:normalizeCategoryEmojis(rawLocal.categories)};
         const syncMeta=await repo.getSyncMetadata();
+        if(JSON.stringify(local.categories)!==JSON.stringify(rawLocal.categories)){await repo.replaceAll(local);}
         if(!cancelled)setData(local);
 
         const remote=await pullFinanceState(family.id);
@@ -772,9 +785,10 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
             }
           }
         }else if(remote){
-          await repo.replaceAll(remote.state);
+          const normalizedRemote={...remote.state,categories:normalizeCategoryEmojis(remote.state.categories)};
+          await repo.replaceAll(normalizedRemote);
           await repo.setSyncMetadata({remoteVersion:remote.version,dirty:false});
-          setData(remote.state);
+          setData(normalizedRemote);
           setRemoteVersion(remote.version);
         }else{
           setRemoteVersion(syncMeta.remoteVersion);
