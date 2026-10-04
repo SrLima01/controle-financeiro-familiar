@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRecurringRule, generateRecurringTransactions, nextRecurringDate, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "./recurring-engine";
+import { applyRecurringRuleToFutureTransactions, createRecurringRule, generateRecurringTransactions, nextRecurringDate, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "./recurring-engine";
 import type { EntityCollection } from "../../infrastructure/persistence/repository";
 
 const accounts=[{id:"a",name:"Conta",type:"CHECKING" as const,openingBalanceCents:0,active:true}];
@@ -43,12 +43,26 @@ describe("recurring engine",()=>{
    const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
    expect(generateRecurringTransactions(data,rule,"2026-12-31").generated).toHaveLength(2);
  });
- it("rejects editing a rule after transactions were generated",()=>{
+ it("allows editing a generated rule while preserving its transaction history",()=>{
    const rule=createRecurringRule(base);
    const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
-   const generated=generateRecurringTransactions(data,rule,"2026-01-31");
+   const generated=generateRecurringTransactions(data,rule,"2026-03-31");
    const stored=generated.data.recurringRules[0];
-   expect(()=>validateRecurringRuleUpdate(stored,{...stored,amountCents:200000})).toThrow("generated transactions");
+   expect(()=>validateRecurringRuleUpdate(stored,{...stored,amountCents:200000})).not.toThrow();
+   expect(stored.transactionIds).toHaveLength(3);
+ });
+ it("propagates recurring rule edits to future generated transactions only",()=>{
+   const rule=createRecurringRule(base);
+   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
+   const generated=generateRecurringTransactions(data,rule,"2026-03-31");
+   const stored=generated.data.recurringRules[0];
+   const updated={...stored,amountCents:200000,description:"Salário ajustado",status:"RECEIVED" as const};
+   const next=applyRecurringRuleToFutureTransactions(generated.data,stored,updated,"2026-02-01");
+   expect(next.transactions.map(t=>({date:t.date,amount:t.amountCents,status:t.status,description:t.description}))).toEqual([
+     {date:"2026-01-31",amount:100000,status:"PLANNED",description:"Aluguel"},
+     {date:"2026-02-28",amount:200000,status:"RECEIVED",description:"Salário ajustado"},
+     {date:"2026-03-31",amount:200000,status:"RECEIVED",description:"Salário ajustado"},
+   ]);
  });
  it("allows editing a rule before its first generation",()=>{
    const rule=createRecurringRule(base);
