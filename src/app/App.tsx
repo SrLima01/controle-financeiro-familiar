@@ -260,14 +260,15 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [creatingCategory,setCreatingCategory]=useState(false);
  const [filter,setFilter]=useState<"ALL"|"INCOME"|"EXPENSE"|"TRANSFER"|"CARD_PAYMENT">("ALL");
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+ const [view,setView]=useState<"new"|"history">("new");
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
  const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
 
- function reset(){setEditing(null);setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("")}
+ function reset(){setEditing(null);setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
  function edit(t:Transaction){
    if(t.installmentGroupId){setError("Parcelas vinculadas devem ser gerenciadas pelo grupo. Use os comandos de cancelamento abaixo.");return;}
-   setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("")
+   setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new")
  }
  async function save(){
    setError("");
@@ -319,9 +320,10 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  }
  function labelType(t:Transaction){return t.type==="TRANSFER"?"Transferência":t.type==="CARD_PAYMENT"?"Pagamento de cartão":t.type==="INCOME"?"Entrada":t.creditCardId?"Compra no cartão":"Saída"}
  return <div className="page-content">
-   <div className="page-heading"><div><span className="eyebrow">Movimentação</span><h1>Transações</h1></div><button className="primary compact" onClick={reset}>+ Novo lançamento</button></div>
+   <div className="page-heading"><div><span className="eyebrow">Movimentação</span><h1>Lançamentos</h1></div><button className="primary compact" onClick={reset}>+ Novo lançamento</button></div>
+   <div className="subnav transaction-tabs"><button className={view==="new"?"active":""} onClick={()=>{setView("new");setError("")}}>Novo lançamento</button><button className={view==="history"?"active":""} onClick={()=>{setView("history");setError("")}}>Lançamentos feitos <span>({data.transactions.length})</span></button></div>
    {error&&<div className="global-alert">{error}</div>}
-   <div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
+   {view==="history"&&<><div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
    <section className="panel transaction-list">{visible.length===0?<Empty text="Nenhum lançamento encontrado."/>:visible.map(t=>{
      const group=t.installmentGroupId?data.installmentGroups.find(g=>g.id===t.installmentGroupId):undefined;
      const n=group?getInstallmentNumber(group,t.id):undefined;
@@ -330,8 +332,8 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
          {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>} </> :
            <>{<button className="link-button" onClick={()=>edit(t)}>Editar</button>}{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
        </div></div></div>
-   })}</section>
-   <section className="panel form-panel"><h2>{editing?"Editar lançamento":"Novo lançamento"}</h2><div className="form-grid">
+   })}</section></>}
+   {view==="new"&&<section className="panel form-panel"><h2>{editing?"Editar lançamento":"Novo lançamento"}</h2><div className="form-grid">
      <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as TransactionType;setType(v);setCategoryId("");setCreditCardId("");if(v!=="EXPENSE")setParcelado(false)}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
      <label>Status<select value={status} onChange={e=>setStatus(e.target.value as RecurringRule["status"])}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
      <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} disabled={recurringGenerated} required/></label>
@@ -349,7 +351,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    {parcelado&&<p className="form-note">O valor informado é o total da compra. As parcelas são geradas mensalmente, com o eventual centavo restante distribuído nas primeiras parcelas. Em compras no cartão, cada parcela entra na fatura correspondente à sua data.</p>}
    <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Registrar lançamento"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar edição</button>}</div>
    {!parcelado&&<p className="form-note">Compra no cartão não reduz a conta. O pagamento da fatura movimenta a conta e não cria outra despesa.</p>}
-   </section>
+   </section>}
  </div>;
 }
 
@@ -384,13 +386,24 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
        const replacement:RecurringRule={...editing,description:description.trim(),frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined};
        validateRecurringRuleUpdate(editing,replacement);
        const generatedIds=new Set(editing.transactionIds);
-       const categoryChanged=editing.categoryId!==replacement.categoryId;
-       const nextTransactions=categoryChanged
-         ? data.transactions.map(tx=>{
-             if(!generatedIds.has(tx.id)||tx.date<todayFinancialDate()) return tx;
-             return replacement.categoryId ? {...tx,categoryId:replacement.categoryId} : (()=>{const {categoryId:_categoryId,...withoutCategory}=tx;return withoutCategory})()
-           })
-         : data.transactions;
+       const nextTransactions=data.transactions.map(tx=>{
+         if(!generatedIds.has(tx.id)||tx.date<todayFinancialDate()) return tx;
+         const nextTx:Transaction={
+           ...tx,
+           description:replacement.description,
+           amountCents:replacement.amountCents,
+           status:replacement.status,
+           ...(replacement.categoryId?{categoryId:replacement.categoryId}:{}),
+           ...(replacement.accountId?{accountId:replacement.accountId}:{}),
+           ...(replacement.creditCardId?{creditCardId:replacement.creditCardId}:{}),
+           ...(replacement.personId?{personId:replacement.personId}:{}),
+         };
+         if(!replacement.categoryId){delete nextTx.categoryId}
+         if(!replacement.accountId){delete nextTx.accountId}
+         if(!replacement.creditCardId){delete nextTx.creditCardId}
+         if(!replacement.personId){delete nextTx.personId}
+         return nextTx;
+       });
        const next={...data,transactions:nextTransactions,recurringRules:data.recurringRules.map(r=>r.id===editing.id?replacement:r)};
        setBusy(true);await onChange(next);reset();return;
      }
