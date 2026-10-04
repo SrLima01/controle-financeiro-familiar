@@ -44,7 +44,7 @@
   margin: 0 0 12px;
 }
 .transaction-row-recurring {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid #415a9b;
 }
 .transaction-recurring-badge {
   display: inline-flex;
@@ -55,7 +55,7 @@
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
+  background: #eef2ff;
+  color: #33477f;
   vertical-align: middle;
 }
