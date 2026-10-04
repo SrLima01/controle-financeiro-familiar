@@ -55,6 +55,35 @@ export function validateRecurringRuleUpdate(previous:RecurringRule,next:Recurrin
   createRecurringRule(input);
 }
 
+export function applyRecurringRuleToFutureTransactions(
+ data:EntityCollection,
+ previous:RecurringRule,
+ next:RecurringRule,
+ fromDate:string
+):EntityCollection{
+ const generatedIds=new Set(previous.transactionIds);
+ const transactions=data.transactions.map(tx=>{
+   if(!generatedIds.has(tx.id)||tx.date<fromDate) return tx;
+   const nextTx:Transaction={
+     ...tx,
+     description:next.description,
+     amountCents:next.amountCents,
+     status:next.status,
+     ...(next.categoryId?{categoryId:next.categoryId}:{}),
+     ...(next.accountId?{accountId:next.accountId}:{}),
+     ...(next.creditCardId?{creditCardId:next.creditCardId}:{}),
+     ...(next.personId?{personId:next.personId}:{}),
+   };
+   if(!next.categoryId) delete nextTx.categoryId;
+   if(!next.accountId) delete nextTx.accountId;
+   if(!next.creditCardId) delete nextTx.creditCardId;
+   if(!next.personId) delete nextTx.personId;
+   validateTransaction(nextTx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});
+   return nextTx;
+ });
+ return {...data,transactions};
+}
+
 export function generateRecurringTransactions(
   data:EntityCollection,
   rule:RecurringRule,
