@@ -1,6 +1,6 @@
 export type Id=string;
 export type Person={id:Id;name:string;active:boolean};
-export type Category={id:Id;name:string;kind:"INCOME"|"EXPENSE";active:boolean};
+export type Category={id:Id;name:string;emoji?:string;kind:"INCOME"|"EXPENSE";active:boolean};
 export type AccountType="CHECKING"|"SAVINGS"|"DIGITAL"|"CASH"|"INVESTMENT";
 export type Account={id:Id;name:string;type:AccountType;openingBalanceCents:number;active:boolean};
 export type CreditCard={id:Id;name:string;accountId:Id;creditLimitCents:number;closingDay:number;dueDay:number;active:boolean};
