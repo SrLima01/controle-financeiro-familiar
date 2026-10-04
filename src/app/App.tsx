@@ -385,8 +385,8 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
      if(editing){
        const replacement:RecurringRule={...editing,description:description.trim(),frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined};
        validateRecurringRuleUpdate(editing,replacement);
-       const nextTransactions=applyRecurringRuleToFutureTransactions(data,editing,replacement,todayFinancialDate());
-       const next={...data,transactions:nextTransactions,recurringRules:data.recurringRules.map(r=>r.id===editing.id?replacement:r)};
+       const propagated=applyRecurringRuleToFutureTransactions(data,editing,replacement,todayFinancialDate());
+       const next={...propagated,recurringRules:propagated.recurringRules.map(r=>r.id===editing.id?replacement:r)};
        setBusy(true);await onChange(next);reset();return;
      }
      const created=createRecurringRule({description,frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined,active:true});
