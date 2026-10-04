@@ -39,3 +39,23 @@
 
 .category-field{display:flex;flex-direction:column;gap:8px;min-width:0}.category-field>label{margin:0}.category-add-button{align-self:flex-start}.category-create-panel{border:1px solid var(--border,#d9e0e7);border-radius:14px;padding:12px;background:var(--surface,#fff);display:flex;flex-direction:column;gap:10px}.category-create-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.category-create-grid{display:grid;grid-template-columns:minmax(0,1fr) 100px;gap:10px}.emoji-picker{display:grid;grid-template-columns:repeat(10,minmax(32px,1fr));gap:6px}.emoji-option{border:1px solid transparent;background:transparent;border-radius:9px;padding:6px;font-size:20px;cursor:pointer;line-height:1}.emoji-option:hover,.emoji-option.selected{border-color:var(--primary,#1f8a8a);background:var(--surface-muted,#f2f6f8)}
 @media (max-width:640px){.category-create-grid{grid-template-columns:1fr 84px}.emoji-picker{grid-template-columns:repeat(7,minmax(32px,1fr))}}
+/* Identidade visual para o tipo de lançamento e recorrências */
+.launch-mode-tabs {
+  margin: 0 0 12px;
+}
+.transaction-row-recurring {
+  border-left: 3px solid #415a9b;
+}
+.transaction-recurring-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  background: #eef2ff;
+  color: #33477f;
+  vertical-align: middle;
+}

@@ -261,14 +261,15 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [filter,setFilter]=useState<"ALL"|"INCOME"|"EXPENSE"|"TRANSFER"|"CARD_PAYMENT">("ALL");
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const [view,setView]=useState<"new"|"history">("new");
+ const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
  const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
 
- function reset(){setEditing(null);setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
+ function reset(){setEditing(null);setLaunchMode("unique");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
  function edit(t:Transaction){
    if(t.installmentGroupId){setError("Parcelas vinculadas devem ser gerenciadas pelo grupo. Use os comandos de cancelamento abaixo.");return;}
-   setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new")
+   setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new");setLaunchMode("unique")
  }
  async function save(){
    setError("");
@@ -323,17 +324,20 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    <div className="page-heading"><div><span className="eyebrow">Movimentação</span><h1>Lançamentos</h1></div><button className="primary compact" onClick={reset}>+ Novo lançamento</button></div>
    <div className="subnav transaction-tabs"><button className={view==="new"?"active":""} onClick={()=>{setView("new");setError("")}}>Novo lançamento</button><button className={view==="history"?"active":""} onClick={()=>{setView("history");setError("")}}>Lançamentos feitos <span>({data.transactions.length})</span></button></div>
    {error&&<div className="global-alert">{error}</div>}
+   {view==="new"&&<div className="subnav launch-mode-tabs"><button className={launchMode==="unique"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("unique");setError("")}}>Lançamento único</button><button className={launchMode==="recurring"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("recurring");setError("")}}>Lançamento recorrente</button></div>}
    {view==="history"&&<><div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
    <section className="panel transaction-list">{visible.length===0?<Empty text="Nenhum lançamento encontrado."/>:visible.map(t=>{
      const group=t.installmentGroupId?data.installmentGroups.find(g=>g.id===t.installmentGroupId):undefined;
      const n=group?getInstallmentNumber(group,t.id):undefined;
-     return <div className="transaction-row" key={t.id}><div><strong>{t.description||labelType(t)}</strong><span>{t.date} · {labelType(t)} · {t.status}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
+     const recurringRule=data.recurringRules.find(rule=>rule.transactionIds.includes(t.id));
+     return <div className={recurringRule?"transaction-row transaction-row-recurring":"transaction-row"} key={t.id}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date} · {labelType(t)} · {t.status}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
        <div className="transaction-value"><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":"+"}{money(t.amountCents)}</strong><div className="row-actions">
          {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>} </> :
            <>{<button className="link-button" onClick={()=>edit(t)}>Editar</button>}{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
        </div></div></div>
    })}</section></>}
-   {view==="new"&&<section className="panel form-panel"><h2>{editing?"Editar lançamento":"Novo lançamento"}</h2><div className="form-grid">
+   {view==="new"&&launchMode==="recurring"&&!editing&&<Recurring data={data} onChange={onChange} embedded onCreated={()=>setLaunchMode("unique")} onCancel={()=>setLaunchMode("unique")}/>}
+   {view==="new"&&launchMode==="unique"&&<section className="panel form-panel"><h2>{editing?"Editar lançamento":"Novo lançamento"}</h2><div className="form-grid">
      <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as TransactionType;setType(v);setCategoryId("");setCreditCardId("");if(v!=="EXPENSE")setParcelado(false)}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
      <label>Status<select value={status} onChange={e=>setStatus(e.target.value as RecurringRule["status"])}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
      <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} disabled={recurringGenerated} required/></label>
@@ -355,7 +359,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  </div>;
 }
 
-function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+function Recurring({data,onChange,embedded=false,onCreated,onCancel}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;embedded?:boolean;onCreated?:()=>void;onCancel?:()=>void}) {
  const [editing,setEditing]=useState<RecurringRule|null>(null);
  const [description,setDescription]=useState("");
  const [frequency,setFrequency]=useState<RecurringFrequency>("MONTHLY");
@@ -387,13 +391,13 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
        validateRecurringRuleUpdate(editing,replacement);
        const propagated=applyRecurringRuleToFutureTransactions(data,editing,replacement,todayFinancialDate());
        const next={...propagated,recurringRules:propagated.recurringRules.map(r=>r.id===editing.id?replacement:r)};
-       setBusy(true);await onChange(next);reset();return;
+       setBusy(true);await onChange(next);reset();onCreated?.();return;
      }
      const created=createRecurringRule({description,frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined,active:true});
      const horizon=new Date(); horizon.setMonth(horizon.getMonth()+12);
      const horizonDate=`${horizon.getFullYear()}-${String(horizon.getMonth()+1).padStart(2,"0")}-${String(horizon.getDate()).padStart(2,"0")}`;
      const generated=generateRecurringTransactions({...data,recurringRules:[...data.recurringRules,created]},created,horizonDate);
-     setBusy(true);await onChange(generated.data);reset();
+     setBusy(true);await onChange(generated.data);reset();onCreated?.();
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a recorrência.");}finally{setBusy(false)}
  }
  async function generate(rule:RecurringRule){
@@ -407,10 +411,10 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
  }
  const frequencyLabel=(f:RecurringFrequency)=>({WEEKLY:"Semanal",BIWEEKLY:"Quinzenal",MONTHLY:"Mensal",BIMONTHLY:"Bimestral",QUARTERLY:"Trimestral",SEMIANNUAL:"Semestral",ANNUAL:"Anual"}[f]);
  return <div className="page-content">
-   <div className="page-heading"><div><span className="eyebrow">Automação</span><h1>Recorrências</h1></div><button className="primary compact" onClick={reset}>+ Nova recorrência</button></div>
+   {!embedded&&<><div className="page-heading"><div><span className="eyebrow">Automação</span><h1>Recorrências</h1></div><button className="primary compact" onClick={reset}>+ Nova recorrência</button></div>
+   <section className="panel transaction-list">{data.recurringRules.filter(r=>r.active).length===0?<Empty text="Nenhuma recorrência ativa."/>:data.recurringRules.filter(r=>r.active).map(r=><div className="transaction-row" key={r.id}><div><strong>{r.description}</strong><span>{frequencyLabel(r.frequency)} · desde {r.startDate} · {money(r.amountCents)} · {r.transactionIds.length} lançamentos gerados</span></div><div className="row-actions"><button className="link-button" onClick={()=>edit(r)}>Editar regra</button><button className="link-button" disabled={busy} onClick={()=>void generate(r)}>Gerar próximos</button><button className="link-button danger" disabled={busy} onClick={()=>void deactivate(r)}>Desativar</button></div></div>)}</section></>}
    {error&&<div className="global-alert">{error}</div>}
-   <section className="panel transaction-list">{data.recurringRules.filter(r=>r.active).length===0?<Empty text="Nenhuma recorrência ativa."/>:data.recurringRules.filter(r=>r.active).map(r=><div className="transaction-row" key={r.id}><div><strong>{r.description}</strong><span>{frequencyLabel(r.frequency)} · desde {r.startDate} · {money(r.amountCents)} · {r.transactionIds.length} lançamentos gerados</span></div><div className="row-actions"><button className="link-button" onClick={()=>edit(r)}>Editar regra</button><button className="link-button" disabled={busy} onClick={()=>void generate(r)}>Gerar próximos</button><button className="link-button danger" disabled={busy} onClick={()=>void deactivate(r)}>Desativar</button></div></div>)}</section>
-   <section className="panel form-panel"><h2>{editing?"Editar recorrência":"Nova recorrência"}</h2><div className="form-grid">
+   <section className="panel form-panel"><h2>{editing?"Editar recorrência":embedded?"Lançamento recorrente":"Nova recorrência"}</h2><div className="form-grid">
     <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as "INCOME"|"EXPENSE";setType(v);setCategoryId("");if(v==="INCOME")setCreditCardId("")}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option></select></label>
     <label>Frequência<select value={frequency} onChange={e=>setFrequency(e.target.value as RecurringFrequency)}><option value="WEEKLY">Semanal</option><option value="BIWEEKLY">Quinzenal</option><option value="MONTHLY">Mensal</option><option value="BIMONTHLY">Bimestral</option><option value="QUARTERLY">Trimestral</option><option value="SEMIANNUAL">Semestral</option><option value="ANNUAL">Anual</option></select></label>
     <label>Data inicial<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
@@ -425,7 +429,7 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
    {creatingCategory&&<QuickCategoryCreate kind={type==="INCOME"?"INCOME":"EXPENSE"} data={data} onChange={onChange} onCreated={category=>{setCategoryId(category.id);setCreatingCategory(false)}} onCancel={()=>setCreatingCategory(false)}/>}
    
    </div><p className="form-note">Ao criar uma recorrência, o sistema gera os próximos 12 meses de lançamentos. Novos lançamentos não são duplicados ao usar “Gerar próximos”.</p>
-   <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar regra":"Criar recorrência"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div></section>
+   <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar regra":"Criar recorrência"}</button>{(editing||embedded)&&<button className="secondary" onClick={embedded&&!editing?onCancel:reset}>Cancelar</button>}</div></section>
  </div>;
 }
 
