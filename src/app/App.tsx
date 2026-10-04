@@ -150,6 +150,32 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
 
 function parseAmount(value:string):number{const cents=parseSmartAmount(value);if(cents===null)throw new Error("Informe um valor válido.");assertCents(cents,"amountCents");return cents}
 
+const CATEGORY_EMOJIS=["🏷️","🛒","🍔","🏠","🚗","💊","🎓","👕","🎮","💡","📱","💰","🐶","👶","📦","🔧","📚","🎁","✈️"];
+
+function QuickCategoryCreate({kind,data,onChange,onCreated,onCancel}:{kind:Category["kind"];data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onCreated:(category:Category)=>void;onCancel:()=>void}) {
+ const [name,setName]=useState("");
+ const [emoji,setEmoji]=useState("🏷️");
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState("");
+ async function save(){
+   setError("");
+   try{
+     const category=createCategory(name,kind,data,emoji);
+     setBusy(true);
+     await onChange({...data,categories:[...data.categories,category]});
+     onCreated(category);
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível criar a categoria.");}
+   finally{setBusy(false);}
+ }
+ return <div className="category-create-panel">
+   <div className="category-create-head"><strong>Nova categoria</strong><button type="button" className="link-button" onClick={onCancel}>Fechar</button></div>
+   <div className="category-create-grid"><label>Nome<input autoFocus value={name} maxLength={60} onChange={e=>setName(e.target.value)} placeholder="Ex.: Bens"/></label><label>Emoji<input value={emoji} maxLength={8} onChange={e=>setEmoji(e.target.value)} aria-label="Emoji da categoria"/></label></div>
+   <div className="emoji-picker" aria-label="Escolha um emoji">{CATEGORY_EMOJIS.map(item=><button type="button" key={item} className={emoji===item?"emoji-option selected":"emoji-option"} onClick={()=>setEmoji(item)} aria-label={"Usar emoji "+item}>{item}</button>)}</div>
+   {error&&<div className="alert error">{error}</div>}
+   <div className="form-actions"><button type="button" className="primary compact" disabled={busy} onClick={()=>void save()}>{busy?"Criando…":"Criar e usar categoria"}</button><button type="button" className="secondary compact" onClick={onCancel}>Cancelar</button></div>
+ </div>;
+}
+
 function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
  const [editing,setEditing]=useState<Transaction|null>(null);
  const [type,setType]=useState<TransactionType>("EXPENSE");
@@ -164,13 +190,14 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [personId,setPersonId]=useState("");
  const [installments,setInstallments]=useState("2");
  const [parcelado,setParcelado]=useState(false);
+ const [creatingCategory,setCreatingCategory]=useState(false);
  const [filter,setFilter]=useState<"ALL"|"INCOME"|"EXPENSE"|"TRANSFER"|"CARD_PAYMENT">("ALL");
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
  const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
 
- function reset(){setEditing(null);setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setError("")}
+ function reset(){setEditing(null);setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("")}
  function edit(t:Transaction){
    if(t.installmentGroupId){setError("Parcelas vinculadas devem ser gerenciadas pelo grupo. Use os comandos de cancelamento abaixo.");return;}
    setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("")
@@ -243,7 +270,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
      <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} disabled={recurringGenerated} required/></label>
      <label>Valor total<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00" required/></label>
      <label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: Mercado"/></label>
-     {(type==="INCOME"||type==="EXPENSE")&&<label>Categoria<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Selecione</option>{data.categories.filter(c=>c.active&&c.kind===(type==="INCOME"?"INCOME":"EXPENSE")||c.id===editing?.categoryId).map(c=><option key={c.id} value={c.id}>{c.name}{c.active?"":" (arquivada)"}</option>)}</select></label>}
+     {(type==="INCOME"||type==="EXPENSE")&&<div className="category-field"><label>Categoria<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Selecione</option>{data.categories.filter(c=>(c.active&&c.kind===(type==="INCOME"?"INCOME":"EXPENSE"))||c.id===editing?.categoryId).map(c=><option key={c.id} value={c.id}>{c.emoji??"🏷️"} {c.name}{c.active?"":" (arquivada)"}</option>)}</select></label><button type="button" className="secondary compact category-add-button" onClick={()=>setCreatingCategory(v=>!v)}>＋ Criar categoria</button>{creatingCategory&&<QuickCategoryCreate kind={type==="INCOME"?"INCOME":"EXPENSE"} data={data} onChange={onChange} onCreated={category=>{setCategoryId(category.id);setCreatingCategory(false);}} onCancel={()=>setCreatingCategory(false)}/>}</div>}
      <label>{type==="TRANSFER"?"Conta de origem":type==="CARD_PAYMENT"?"Conta de pagamento":"Conta"}<select value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value&&type!=="CARD_PAYMENT")setCreditCardId("")}} disabled={type==="CARD_PAYMENT"&&!!creditCardId}><option value="">Selecione</option>{(type==="CARD_PAYMENT"&&creditCardId?data.accounts.filter(a=>a.id===data.cards.find(c=>c.id===creditCardId)?.accountId ):transactionAccountOptions).map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label>
      {type==="TRANSFER"&&<label>Conta de destino<select value={destinationAccountId} onChange={e=>setDestinationAccountId(e.target.value)}><option value="">Selecione</option>{transactionAccountOptions.map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label>}
      {type==="EXPENSE"&&<label>Cartão de crédito (opcional)<select value={creditCardId} onChange={e=>{setCreditCardId(e.target.value);if(e.target.value)setAccountId("")}}><option value="">Nenhum / conta</option>{transactionCardOptions.map(c=><option key={c.id} value={c.id}>{c.name}{c.active?"":" (arquivado)"}</option>)}</select></label>}
@@ -565,17 +592,17 @@ function ReceiptScanner({data,onChange}:{data:EntityCollection;onChange:(next:En
 }
 
 function Categories({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
- const [editing,setEditing]=useState<Category|null>(null); const [name,setName]=useState(""); const [kind,setKind]=useState<Category["kind"]>("EXPENSE"); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
- function reset(){setEditing(null);setName("");setKind("EXPENSE");setError("")}
- function edit(c:Category){setEditing(c);setName(c.name);setKind(c.kind);setError("")}
- async function save(){setError("");try{const c=editing?updateCategory(editing,name,kind,data):createCategory(name,kind,data);setBusy(true);await onChange({...data,categories:editing?data.categories.map(x=>x.id===c.id?c:x):[...data.categories,c]});reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a categoria.");}finally{setBusy(false)}}
+ const [editing,setEditing]=useState<Category|null>(null); const [name,setName]=useState(""); const [emoji,setEmoji]=useState("🏷️"); const [kind,setKind]=useState<Category["kind"]>("EXPENSE"); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+ function reset(){setEditing(null);setName("");setEmoji("🏷️");setKind("EXPENSE");setError("")}
+ function edit(c:Category){setEditing(c);setName(c.name);setEmoji(c.emoji??"🏷️");setKind(c.kind);setError("")}
+ async function save(){setError("");try{const c=editing?updateCategory(editing,name,kind,data,emoji):createCategory(name,kind,data,emoji);setBusy(true);await onChange({...data,categories:editing?data.categories.map(x=>x.id===c.id?c:x):[...data.categories,c]});reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a categoria.");}finally{setBusy(false)}}
  async function archive(c:Category){if(!confirm("Arquivar esta categoria? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,categories:data.categories.map(x=>x.id===c.id?archiveCategory(x):x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar a categoria.");}finally{setBusy(false)}}
  const active=data.categories.filter(c=>c.active);
  return <div className="page-content">
   <div className="page-heading"><div><span className="eyebrow">Cadastros</span><h1>Categorias</h1></div><button className="primary compact" onClick={reset}>+ Nova categoria</button></div>
   {error&&<div className="global-alert">{error}</div>}
-  <section className="panel">{active.length===0?<Empty text="Nenhuma categoria cadastrada."/>:<div className="report-list">{active.map(c=><div className="report-row" key={c.id}><span><strong>{c.name}</strong> · {c.kind==="EXPENSE"?"Despesa":"Receita"}</span><div className="row-actions"><button className="link-button" onClick={()=>edit(c)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(c)}>Arquivar</button></div></div>)}</div>}</section>
-  <section className="panel form-panel"><h2>{editing?"Editar categoria":"Nova categoria"}</h2><div className="form-grid"><label>Nome<input value={name} maxLength={60} onChange={e=>setName(e.target.value)} placeholder="Ex.: Alimentação"/></label><label>Tipo<select value={kind} onChange={e=>setKind(e.target.value as Category["kind"])}><option value="EXPENSE">Despesa</option><option value="INCOME">Receita</option></select></label></div><div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Adicionar categoria"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div><p className="form-note">Arquivar remove a categoria dos novos lançamentos, mas preserva os lançamentos históricos e seus relatórios.</p></section>
+  <section className="panel">{active.length===0?<Empty text="Nenhuma categoria cadastrada."/>:<div className="report-list">{active.map(c=><div className="report-row" key={c.id}><span><strong>{c.emoji??"🏷️"} {c.name}</strong> · {c.kind==="EXPENSE"?"Despesa":"Receita"}</span><div className="row-actions"><button className="link-button" onClick={()=>edit(c)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(c)}>Arquivar</button></div></div>)}</div>}</section>
+  <section className="panel form-panel"><h2>{editing?"Editar categoria":"Nova categoria"}</h2><div className="form-grid"><label>Nome<input value={name} maxLength={60} onChange={e=>setName(e.target.value)} placeholder="Ex.: Alimentação"/></label><label>Emoji<input value={emoji} maxLength={8} onChange={e=>setEmoji(e.target.value)} aria-label="Emoji da categoria"/></label><label>Tipo<select value={kind} onChange={e=>setKind(e.target.value as Category["kind"])}><option value="EXPENSE">Despesa</option><option value="INCOME">Receita</option></select></label></div><div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Adicionar categoria"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div><p className="form-note">Arquivar remove a categoria dos novos lançamentos, mas preserva os lançamentos históricos e seus relatórios.</p></section>
  </div>;
 }
 
