@@ -50,7 +50,6 @@ export function createRecurringRule(input:RecurringRuleInput):RecurringRule{
 
 export function validateRecurringRuleUpdate(previous:RecurringRule,next:RecurringRule):void{
   if(previous.id!==next.id) throw new Error("Recurring rule id cannot change");
-  if(previous.transactionIds.length>0) throw new Error("Recurring rules with generated transactions cannot be edited. Create a new rule to preserve history.");
   if(JSON.stringify(previous.transactionIds)!==JSON.stringify(next.transactionIds)) throw new Error("Recurring rule transaction history cannot change");
   const {id: _id, transactionIds: _transactionIds, ...input}=next;
   createRecurringRule(input);
