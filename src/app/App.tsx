@@ -38,6 +38,39 @@ function todayMonth() {
   return d.toLocaleDateString("pt-BR", { month:"long", year:"numeric" });
 }
 
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+
+function monthLabel(monthKey:string) {
+  const d = new Date(monthKey+"-15T12:00:00");
+  const label = d.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+  return label.charAt(0).toUpperCase()+label.slice(1);
+}
+
+function monthEndDate(monthKey:string) {
+  const [year,month] = monthKey.split("-").map(Number);
+  return `${year}-${String(month).padStart(2,"0")}-${String(new Date(year,month,0).getDate()).padStart(2,"0")}`;
+}
+
+function projectedAccountBalanceUntil(accountId:string,data:EntityCollection,throughDate?:string) {
+  const account=data.accounts.find(a=>a.id===accountId);
+  if(!account) return 0;
+  let balance=account.openingBalanceCents;
+  for(const tx of data.transactions) {
+    if(tx.status==="CANCELLED" || (throughDate && tx.date>throughDate)) continue;
+    if(tx.type==="INCOME" && tx.accountId===accountId) balance+=tx.amountCents;
+    if(tx.type==="EXPENSE" && tx.accountId===accountId) balance-=tx.amountCents;
+    if(tx.type==="TRANSFER") {
+      if(tx.accountId===accountId) balance-=tx.amountCents;
+      if(tx.destinationAccountId===accountId) balance+=tx.amountCents;
+    }
+    if(tx.type==="CARD_PAYMENT" && tx.accountId===accountId) balance-=tx.amountCents;
+  }
+  return balance;
+}
+
 function AuthScreen({ onAuthenticated }:{onAuthenticated:(user:User)=>void}) {
   const [mode,setMode] = useState<"login"|"signup">("login");
   const [email,setEmail] = useState("");
@@ -96,20 +129,43 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
 }
 
 function Dashboard({data,onQuickAction}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt"|"manual")=>void}) {
+  const [planningPeriod,setPlanningPeriod]=useState(currentMonthKey());
+  const periodOptions=useMemo(()=>{
+    const months=new Set<string>([currentMonthKey()]);
+    data.transactions.forEach(tx=>months.add(tx.date.slice(0,7)));
+    return [...months].sort();
+  },[data.transactions]);
+
   const real=useMemo(()=>calculateTotalRealBalance({accounts:data.accounts,cards:data.cards,transactions:data.transactions}),[data]);
-  const projected=useMemo(()=>data.accounts.filter(a=>a.active).reduce((s,a)=>s+calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}),0),[data]);
-  const pending=data.transactions.filter(t=>t.status==="PENDING"||t.status==="PLANNED").reduce((s,t)=>s+(t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0);
+  const throughDate=planningPeriod==="ALL" ? undefined : monthEndDate(planningPeriod);
+  const projected=useMemo(()=>data.accounts.filter(a=>a.active).reduce((sum,a)=>sum+projectedAccountBalanceUntil(a.id,data,throughDate),0),[data,throughDate]);
+  const planned=useMemo(()=>data.transactions
+    .filter(t=>(planningPeriod==="ALL"||t.date.startsWith(planningPeriod))&&(t.status==="PENDING"||t.status==="PLANNED"))
+    .reduce((sum,t)=>sum+(t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0),[data.transactions,planningPeriod]);
+
   return <div className="page-content">
-    <div className="page-heading"><div><span className="eyebrow">{todayMonth()}</span><h1>Visão geral</h1></div><span className="sync-dot">Local</span></div>
+    <div className="page-heading"><div><span className="eyebrow">{planningPeriod==="ALL"?"Planejamento completo":monthLabel(planningPeriod)}</span><h1>Visão geral</h1></div><span className="sync-dot">Local</span></div>
     <section className="quick-actions">
       <button className="quick-action quick-action-primary" onClick={()=>onQuickAction("smart")}><span className="quick-action-icon" aria-hidden="true">🎙</span><span><strong>Lançar com áudio</strong><small>Fale o gasto e revise antes de salvar</small></span><b aria-hidden="true">›</b></button>
       <button className="quick-action" onClick={()=>onQuickAction("receipt")}><span className="quick-action-icon" aria-hidden="true">📷</span><span><strong>Fotografar recibo</strong><small>Leia o valor e confira o lançamento</small></span><b aria-hidden="true">›</b></button>
       <button className="quick-action" onClick={()=>onQuickAction("manual")}><span className="quick-action-icon" aria-hidden="true">＋</span><span><strong>Novo lançamento</strong><small>Digite e registre uma movimentação</small></span><b aria-hidden="true">›</b></button>
     </section>
     <section className="hero-card"><span>Saldo total real</span><strong>{money(real)}</strong><small>Somente movimentos pagos/recebidos.</small></section>
-    <div className="metric-grid"><article className="metric"><span>Projetado</span><strong>{money(projected)}</strong><small>Considera lançamentos futuros.</small></article><article className="metric"><span>Movimentos pendentes</span><strong>{money(pending)}</strong><small>Impacto ainda não realizado.</small></article></div>
+    <section className="panel form-panel">
+      <div className="section-title"><div><h2>Planejamento</h2><span>Escolha o período que deseja enxergar na visão inicial.</span></div></div>
+      <label>Filtrar por mês
+        <select value={planningPeriod} onChange={e=>setPlanningPeriod(e.target.value)}>
+          {periodOptions.map(month=><option key={month} value={month}>{month===currentMonthKey()?"Mês atual · ":""}{monthLabel(month)}</option>)}
+          <option value="ALL">Todos os meses · todo o planejamento gerado</option>
+        </select>
+      </label>
+    </section>
+    <div className="metric-grid">
+      <article className="metric"><span>Saldo projetado</span><strong>{money(projected)}</strong><small>{planningPeriod==="ALL"?"Considera todo o planejamento já gerado.":`Projeção até o fim de ${monthLabel(planningPeriod)}.`}</small></article>
+      <article className="metric"><span>Planejado no período</span><strong>{money(planned)}</strong><small>Somente pendentes e planejados do período selecionado.</small></article>
+    </div>
     <section className="panel"><div className="section-title"><h2>Contas</h2><span>{data.accounts.filter(a=>a.active).length} ativas</span></div>
-      {data.accounts.filter(a=>a.active).length===0 ? <Empty text="Nenhuma conta cadastrada ainda."/> : <div className="account-list">{data.accounts.filter(a=>a.active).map(a=><div className="account-row" key={a.id}><div><strong>{a.name}</strong><span>{a.type}</span></div><strong>{money(calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}))}</strong></div>)}</div>}
+      {data.accounts.filter(a=>a.active).length===0 ? <Empty text="Nenhuma conta cadastrada ainda."/> : <div className="account-list">{data.accounts.filter(a=>a.active).map(a=><div className="account-row" key={a.id}><div><strong>{a.name}</strong><span>{a.type}</span></div><strong>{money(projectedAccountBalanceUntil(a.id,data,throughDate))}</strong></div>)}</div>}
     </section>
   </div>;
 }
