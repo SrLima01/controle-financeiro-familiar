@@ -31,6 +31,10 @@ function money(cents:number) {
   return new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(cents / 100);
 }
 
+function displayMoney(cents:number, hidden:boolean) {
+  return hidden ? "R$ ••••••" : money(cents);
+}
+
 function todayFinancialDate() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 
 function todayMonth() {
@@ -128,7 +132,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
   </section></main>;
 }
 
-function Dashboard({data,onQuickAction}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt"|"manual")=>void}) {
+function Dashboard({data,onQuickAction,hideValues,onToggleHideValues}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt"|"manual")=>void;hideValues:boolean;onToggleHideValues:()=>void}) {
   const [planningPeriod,setPlanningPeriod]=useState(currentMonthKey());
   const periodOptions=useMemo(()=>{
     const months=new Set<string>([currentMonthKey()]);
@@ -144,13 +148,13 @@ function Dashboard({data,onQuickAction}:{data:EntityCollection;onQuickAction:(mo
     .reduce((sum,t)=>sum+(t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0),[data.transactions,planningPeriod]);
 
   return <div className="page-content">
-    <div className="page-heading"><div><span className="eyebrow">{planningPeriod==="ALL"?"Planejamento completo":monthLabel(planningPeriod)}</span><h1>Visão geral</h1></div><span className="sync-dot">Local</span></div>
+    <div className="page-heading"><div><span className="eyebrow">{planningPeriod==="ALL"?"Planejamento completo":monthLabel(planningPeriod)}</span><h1>Visão geral</h1></div><div className="dashboard-heading-actions"><button className="value-visibility-button" type="button" onClick={onToggleHideValues} aria-label={hideValues?"Mostrar valores financeiros":"Ocultar valores financeiros"} title={hideValues?"Mostrar valores":"Ocultar valores"}>{hideValues?"◉":"◉"}<span>{hideValues?"Mostrar":"Ocultar"}</span></button><span className="sync-dot">Local</span></div></div>
     <section className="quick-actions">
       <button className="quick-action quick-action-primary" onClick={()=>onQuickAction("smart")}><span className="quick-action-icon" aria-hidden="true">🎙</span><span><strong>Lançar com áudio</strong><small>Fale o gasto e revise antes de salvar</small></span><b aria-hidden="true">›</b></button>
       <button className="quick-action" onClick={()=>onQuickAction("receipt")}><span className="quick-action-icon" aria-hidden="true">📷</span><span><strong>Fotografar recibo</strong><small>Leia o valor e confira o lançamento</small></span><b aria-hidden="true">›</b></button>
       <button className="quick-action" onClick={()=>onQuickAction("manual")}><span className="quick-action-icon" aria-hidden="true">＋</span><span><strong>Novo lançamento</strong><small>Digite e registre uma movimentação</small></span><b aria-hidden="true">›</b></button>
     </section>
-    <section className="hero-card"><span>Saldo total real</span><strong>{money(real)}</strong><small>Somente movimentos pagos/recebidos.</small></section>
+    <section className="hero-card"><span>Saldo total real</span><strong>{displayMoney(real,hideValues)}</strong><small>Somente movimentos pagos/recebidos.</small></section>
     <section className="panel form-panel">
       <div className="section-title"><div><h2>Planejamento</h2><span>Escolha o período que deseja enxergar na visão inicial.</span></div></div>
       <label>Filtrar por mês
@@ -161,11 +165,11 @@ function Dashboard({data,onQuickAction}:{data:EntityCollection;onQuickAction:(mo
       </label>
     </section>
     <div className="metric-grid">
-      <article className="metric"><span>Saldo projetado</span><strong>{money(projected)}</strong><small>{planningPeriod==="ALL"?"Considera todo o planejamento já gerado.":`Projeção até o fim de ${monthLabel(planningPeriod)}.`}</small></article>
-      <article className="metric"><span>Planejado no período</span><strong>{money(planned)}</strong><small>Somente pendentes e planejados do período selecionado.</small></article>
+      <article className="metric"><span>Saldo projetado</span><strong>{displayMoney(projected,hideValues)}</strong><small>{planningPeriod==="ALL"?"Considera todo o planejamento já gerado.":`Projeção até o fim de ${monthLabel(planningPeriod)}.`}</small></article>
+      <article className="metric"><span>Planejado no período</span><strong>{displayMoney(planned,hideValues)}</strong><small>Somente pendentes e planejados do período selecionado.</small></article>
     </div>
     <section className="panel"><div className="section-title"><h2>Contas</h2><span>{data.accounts.filter(a=>a.active).length} ativas</span></div>
-      {data.accounts.filter(a=>a.active).length===0 ? <Empty text="Nenhuma conta cadastrada ainda."/> : <div className="account-list">{data.accounts.filter(a=>a.active).map(a=><div className="account-row" key={a.id}><div><strong>{a.name}</strong><span>{a.type}</span></div><strong>{money(projectedAccountBalanceUntil(a.id,data,throughDate))}</strong></div>)}</div>}
+      {data.accounts.filter(a=>a.active).length===0 ? <Empty text="Nenhuma conta cadastrada ainda."/> : <div className="account-list">{data.accounts.filter(a=>a.active).map(a=><div className="account-row" key={a.id}><div><strong>{a.name}</strong><span>{a.type}</span></div><strong>{displayMoney(projectedAccountBalanceUntil(a.id,data,throughDate),hideValues)}</strong></div>)}</div>}
     </section>
   </div>;
 }
@@ -797,6 +801,8 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
 
 function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Family;onSignOut:()=>Promise<void>;onSwitchFamily:()=>void}) {
   const [page,setPage]=useState<Page>("dashboard");
+  const [hideValues,setHideValues]=useState(()=>localStorage.getItem("finance-hide-values")==="1");
+  function toggleHideValues(){setHideValues(current=>{const next=!current;localStorage.setItem("finance-hide-values",next?"1":"0");return next;});}
   const [quickMode,setQuickMode]=useState<"smart"|"receipt">("smart");
   function openQuickAction(mode:"smart"|"receipt"|"manual"){
     if(mode==="manual"){setPage("transacoes");return}
@@ -902,12 +908,12 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     }
     setError("O estado online mudou novamente. Atualize a tela e resolva o novo conflito.");
   }
-  const content = page==="dashboard" ? <Dashboard data={data} onQuickAction={openQuickAction}/> :
+  const content = page==="dashboard" ? <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues}/> :
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
     page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode}/> : page==="relatorios" ? <Reports data={data}/> :
-    <Dashboard data={data} onQuickAction={openQuickAction}/>;
+    <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues}/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar família</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
     {legacyData && <section className="panel sync-conflict"><strong>Dados locais de uma versão anterior encontrados</strong><p>Encontramos dados salvos neste aparelho antes da separação por família. Eles não foram misturados automaticamente.</p><p>Se esta família já possui dados financeiros, não importe os dados antigos: a importação substitui o estado financeiro atual da família.</p><div className="form-actions"><button className="secondary compact" onClick={()=>{localStorage.setItem(`legacy-migration-dismissed-${family.id}`,"1");setLegacyData(null);}}>Ignorar</button><button className="primary compact" onClick={()=>{const old=legacyData;if(!old)return;const currentHasData=Object.values(data).some(items=>items.length>0);if(currentHasData){setError("A família atual já possui dados. Por segurança, os dados locais antigos não podem substituir esse estado automaticamente. Exporte um backup e faça a migração somente após confirmar que a família está vazia.");return;}void persist(old).then(()=>{localStorage.setItem(`legacy-migration-completed-${family.id}`,"1");setLegacyData(null)}).catch(e=>setError(e instanceof Error?e.message:"Não foi possível importar os dados antigos."));}}>Importar dados antigos</button></div></section>}
