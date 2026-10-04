@@ -14,7 +14,7 @@ import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator"
 import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
 import { assertCents } from "../domain/money/cents";
 import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
-import { createRecurringRule, deactivateRecurringRule, generateRecurringTransactions, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
+import { applyRecurringRuleToFutureTransactions, createRecurringRule, deactivateRecurringRule, generateRecurringTransactions, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
 import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
 import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
 import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
@@ -385,25 +385,7 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
      if(editing){
        const replacement:RecurringRule={...editing,description:description.trim(),frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined};
        validateRecurringRuleUpdate(editing,replacement);
-       const generatedIds=new Set(editing.transactionIds);
-       const nextTransactions=data.transactions.map(tx=>{
-         if(!generatedIds.has(tx.id)||tx.date<todayFinancialDate()) return tx;
-         const nextTx:Transaction={
-           ...tx,
-           description:replacement.description,
-           amountCents:replacement.amountCents,
-           status:replacement.status,
-           ...(replacement.categoryId?{categoryId:replacement.categoryId}:{}),
-           ...(replacement.accountId?{accountId:replacement.accountId}:{}),
-           ...(replacement.creditCardId?{creditCardId:replacement.creditCardId}:{}),
-           ...(replacement.personId?{personId:replacement.personId}:{}),
-         };
-         if(!replacement.categoryId){delete nextTx.categoryId}
-         if(!replacement.accountId){delete nextTx.accountId}
-         if(!replacement.creditCardId){delete nextTx.creditCardId}
-         if(!replacement.personId){delete nextTx.personId}
-         return nextTx;
-       });
+       const nextTransactions=applyRecurringRuleToFutureTransactions(data,editing,replacement,todayFinancialDate());
        const next={...data,transactions:nextTransactions,recurringRules:data.recurringRules.map(r=>r.id===editing.id?replacement:r)};
        setBusy(true);await onChange(next);reset();return;
      }
