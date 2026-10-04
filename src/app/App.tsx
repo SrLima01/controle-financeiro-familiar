@@ -310,12 +310,13 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
  const [creditCardId,setCreditCardId]=useState("");
  const [categoryId,setCategoryId]=useState("");
  const [personId,setPersonId]=useState("");
+ const [creatingCategory,setCreatingCategory]=useState(false);
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const activeAccounts=data.accounts.filter(a=>a.active),activeCards=data.cards.filter(c=>c.active),activePeople=data.people.filter(p=>p.active);
  const activeCategories=data.categories.filter(c=>c.active&&c.kind===type);
- function reset(){setEditing(null);setDescription("");setFrequency("MONTHLY");setStartDate(todayFinancialDate());setEndDate("");setAmount("");setType("EXPENSE");setStatus("PLANNED");setAccountId("");setCreditCardId("");setCategoryId("");setPersonId("");setError("")}
+ function reset(){setEditing(null);setDescription("");setFrequency("MONTHLY");setStartDate(todayFinancialDate());setEndDate("");setAmount("");setType("EXPENSE");setStatus("PLANNED");setAccountId("");setCreditCardId("");setCategoryId("");setPersonId("");setCreatingCategory(false);setError("")}
  function edit(rule:RecurringRule){
-   setEditing(rule);setDescription(rule.description);setFrequency(rule.frequency);setStartDate(rule.startDate);setEndDate(rule.endDate??"");setAmount((rule.amountCents/100).toFixed(2).replace(".",","));setType(rule.type);setStatus(rule.status);setAccountId(rule.accountId??"");setCreditCardId(rule.creditCardId??"");setCategoryId(rule.categoryId??"");setPersonId(rule.personId??"");setError("");
+   setEditing(rule);setDescription(rule.description);setFrequency(rule.frequency);setStartDate(rule.startDate);setEndDate(rule.endDate??"");setAmount((rule.amountCents/100).toFixed(2).replace(".",","));setType(rule.type);setStatus(rule.status);setAccountId(rule.accountId??"");setCreditCardId(rule.creditCardId??"");setCategoryId(rule.categoryId??"");setPersonId(rule.personId??"");setCreatingCategory(false);setError("");
  }
  async function save(){
    setError("");
@@ -324,10 +325,17 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
      if(type==="EXPENSE"&&!accountId&&!creditCardId) throw new Error("Despesa recorrente precisa de conta ou cartão.");
      if(accountId&&creditCardId) throw new Error("Use conta ou cartão, não ambos.");
      if(editing){
-       if(editing.transactionIds.length>0) throw new Error("Esta recorrência já possui lançamentos gerados. Para preservar o histórico, a alteração da série será feita em uma etapa própria.");
        const replacement:RecurringRule={...editing,description:description.trim(),frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined};
        validateRecurringRuleUpdate(editing,replacement);
-       const next={...data,recurringRules:data.recurringRules.map(r=>r.id===editing.id?replacement:r)};
+       const generatedIds=new Set(editing.transactionIds);
+       const categoryChanged=editing.categoryId!==replacement.categoryId;
+       const nextTransactions=categoryChanged
+         ? data.transactions.map(tx=>{
+             if(!generatedIds.has(tx.id)||tx.date<todayFinancialDate()) return tx;
+             return replacement.categoryId ? {...tx,categoryId:replacement.categoryId} : (()=>{const {categoryId:_categoryId,...withoutCategory}=tx;return withoutCategory})()
+           })
+         : data.transactions;
+       const next={...data,transactions:nextTransactions,recurringRules:data.recurringRules.map(r=>r.id===editing.id?replacement:r)};
        setBusy(true);await onChange(next);reset();return;
      }
      const created=createRecurringRule({description,frequency,startDate,endDate:endDate||undefined,amountCents:cents,type,status,accountId:accountId||undefined,creditCardId:creditCardId||undefined,categoryId:categoryId||undefined,personId:personId||undefined,active:true});
@@ -359,10 +367,12 @@ function Recurring({data,onChange}:{data:EntityCollection;onChange:(next:EntityC
     <label>Valor<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00"/></label>
     <label>Status<select value={status} onChange={e=>{const v=e.target.value;if(v==="PENDING"||v==="PAID"||v==="RECEIVED"||v==="PLANNED")setStatus(v)}}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
     <label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: Aluguel"/></label>
-    {activeCategories.length>0&&<label>Categoria<select value={categoryId} onChange={e=>setCategoryId(e.target.value)}><option value="">Nenhuma</option>{activeCategories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+    <label>Categoria<select value={creatingCategory?CATEGORY_CREATE_VALUE:categoryId} onChange={e=>{if(e.target.value===CATEGORY_CREATE_VALUE){setCreatingCategory(true);return}setCreatingCategory(false);setCategoryId(e.target.value)}}><option value="">Nenhuma</option>{activeCategories.map(c=><option key={c.id} value={c.id}>{c.emoji??"🏷️"} {c.name}</option>)}<option value={CATEGORY_CREATE_VALUE}>＋ Criar nova categoria…</option></select></label>
     <label>Conta<select value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value)setCreditCardId("")}}><option value="">Nenhuma</option>{activeAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
     {type==="EXPENSE"&&<label>Cartão<select value={creditCardId} onChange={e=>{setCreditCardId(e.target.value);if(e.target.value)setAccountId("")}}><option value="">Nenhum</option>{activeCards.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
     <label>Pessoa (opcional)<select value={personId} onChange={e=>setPersonId(e.target.value)}><option value="">Nenhuma</option>{activePeople.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+   {creatingCategory&&<QuickCategoryCreate kind={type==="INCOME"?"INCOME":"EXPENSE"} data={data} onChange={onChange} onCreated={category=>{setCategoryId(category.id);setCreatingCategory(false)}} onCancel={()=>setCreatingCategory(false)}/>}
+   
    </div><p className="form-note">Ao criar uma recorrência, o sistema gera os próximos 12 meses de lançamentos. Novos lançamentos não são duplicados ao usar “Gerar próximos”.</p>
    <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar regra":"Criar recorrência"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div></section>
  </div>;
