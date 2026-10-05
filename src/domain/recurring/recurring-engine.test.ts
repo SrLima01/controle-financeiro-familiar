@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyRecurringRuleToFutureTransactions, createRecurringRule, generateRecurringTransactions, nextRecurringDate, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "./recurring-engine";
+import { applyRecurringRuleToFutureTransactions, createRecurringRule, ensureRecurringHorizon, generateRecurringTransactions, nextRecurringDate, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "./recurring-engine";
 import type { EntityCollection } from "../../infrastructure/persistence/repository";
 
 const accounts=[{id:"a",name:"Conta",type:"CHECKING" as const,openingBalanceCents:0,active:true}];
