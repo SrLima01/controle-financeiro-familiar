@@ -64,3 +64,8 @@
 /* Privacidade dos valores na visão inicial */
 .dashboard-heading-actions{display:flex;align-items:center;gap:8px}.value-visibility-button{display:inline-flex;align-items:center;gap:6px;border:1px solid #dfe4ec;background:#fff;color:#415a9b;border-radius:10px;padding:7px 10px;font-size:12px;font-weight:800}.value-visibility-button:hover{background:#f5f7fb}.value-visibility-button:focus-visible{outline:3px solid rgba(65,90,155,.2);outline-offset:2px}.visibility-icon{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 @media(max-width:520px){.value-visibility-button span{display:none}.dashboard-heading-actions{gap:6px}}
+
+
+.report-section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}.report-section-heading h2{margin:0}.report-section-heading span{display:block;margin-top:4px;color:var(--muted,#68717d);font-size:13px}
+.report-bar-row{display:grid;gap:3px}.report-bar-track{height:6px;border-radius:999px;background:#edf0f4;overflow:hidden}.report-bar-fill{height:100%;border-radius:999px;background:#415a9b;transition:width .25s ease}.report-bar-fill.income{background:#2f855a}.report-bar-fill.person{background:#b7791f}.report-bar-fill.monthly{background:#3182ce}
+@media (max-width:520px){.report-section-heading{display:block}.report-row{gap:10px}.report-row strong{white-space:nowrap}}
