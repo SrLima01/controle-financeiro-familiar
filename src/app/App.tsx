@@ -928,8 +928,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily,theme,onToggleTheme}:{us
   </div>;
 }
 
-export default function App() {\n  const [theme,setTheme]=useState<"light"|"dark">(()=>{\n    const saved=localStorage.getItem("finance-theme");\n    return saved==="dark"?"dark":"light";\n  });\n  useEffect(()=>{\n    document.documentElement.dataset.theme=theme;\n    localStorage.setItem("finance-theme",theme);\n  },[theme]);
-  const [user,setUser]=useState<User|null>(null);
+export default function App() {\n  const [theme,setTheme]=useState<"light"|"dark">(()=>{\n    const saved=localStorage.getItem("finance-theme");\n    return saved==="dark"?"dark":"light";\n  });\n  useEffect(()=>{\n    document.documentElement.dataset.theme=theme;\n    localStorage.setItem("finance-theme",theme);\n  },[theme]);\n  const [user,setUser]=useState<User|null>(null);
   const [family,setFamily]=useState<Family|null>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
