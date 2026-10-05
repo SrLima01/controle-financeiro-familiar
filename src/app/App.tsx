@@ -288,6 +288,8 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [showAllRecurring,setShowAllRecurring]=useState(false);
  const [transactionSearch,setTransactionSearch]=useState("");
  const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
+ const [recurringScopeRequest,setRecurringScopeRequest]=useState<{description:string;date:string;amountCents:number}|null>(null);
+ const recurringScopeResolverRef=useRef<((scope:"ONE"|"FUTURE"|"CANCEL")=>void)|null>(null);
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const normalizedSearch=transactionSearch.trim().toLocaleLowerCase("pt-BR");
  const visible=data.transactions.filter(t=>(filter==="ALL"||t.type===filter)&&(!normalizedSearch||[t.description,t.date,t.status,labelType(t)].join(" ").toLocaleLowerCase("pt-BR").includes(normalizedSearch))).sort((a,b)=>b.date.localeCompare(a.date));
@@ -299,11 +301,16 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  }
  async function askRecurringScope(tx:Transaction){
    const rule=data.recurringRules.find(r=>r.transactionIds.includes(tx.id)); if(!rule) return "ONE" as const;
-   if(!confirm("Alterar somente este lançamento?\n\nOK = somente este\nCancelar = escolher se deseja aplicar aos próximos também.")) {
-     if(confirm("Aplicar esta alteração a este lançamento e aos próximos da mesma recorrência?\n\nOK = este e próximos\nCancelar = voltar sem salvar.")) return "FUTURE" as const;
-     return "CANCEL" as const;
-   }
-   return "ONE" as const;
+   return await new Promise<"ONE"|"FUTURE"|"CANCEL">(resolve=>{
+     recurringScopeResolverRef.current=resolve;
+     setRecurringScopeRequest({description:rule.description,date:tx.date,amountCents:tx.amountCents});
+   });
+ }
+ function chooseRecurringScope(scope:"ONE"|"FUTURE"|"CANCEL"){
+   const resolve=recurringScopeResolverRef.current;
+   recurringScopeResolverRef.current=null;
+   setRecurringScopeRequest(null);
+   resolve?.(scope);
  }
  async function save(){
    setError("");
@@ -442,6 +449,22 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Registrar lançamento"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar edição</button>}</div>
    {!parcelado&&<p className="form-note">Compra no cartão não reduz a conta. O pagamento da fatura movimenta a conta e não cria outra despesa.</p>}
    </section>}
+   {recurringScopeRequest&&<div className="recurring-scope-backdrop" role="presentation">
+     <section className="recurring-scope-modal" role="dialog" aria-modal="true" aria-labelledby="recurring-scope-title">
+       <div className="recurring-scope-icon" aria-hidden="true">↻</div>
+       <div className="recurring-scope-content">
+         <span className="eyebrow">Lançamento recorrente</span>
+         <h2 id="recurring-scope-title">Como deseja aplicar esta alteração?</h2>
+         <p>Você está ajustando <strong>{recurringScopeRequest.description}</strong>, em {recurringScopeRequest.date}, no valor de <strong>{money(recurringScopeRequest.amountCents)}</strong>.</p>
+         <p className="recurring-scope-help">Escolha se a mudança vale apenas para esta ocorrência ou também para as próximas da mesma recorrência.</p>
+       </div>
+       <div className="recurring-scope-actions">
+         <button className="secondary" type="button" onClick={()=>chooseRecurringScope("ONE")}>Somente este lançamento</button>
+         <button className="primary" type="button" onClick={()=>chooseRecurringScope("FUTURE")}>Este e os próximos</button>
+         <button className="link-button" type="button" onClick={()=>chooseRecurringScope("CANCEL")}>Cancelar</button>
+       </div>
+     </section>
+   </div>}
  </div>;
 }
 
