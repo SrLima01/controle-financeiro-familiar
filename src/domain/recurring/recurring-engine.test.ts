@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyRecurringRuleToFutureTransactions, createRecurringRule, generateRecurringTransactions, nextRecurringDate, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "./recurring-engine";
+import { applyRecurringRuleToFutureTransactions, createRecurringRule, ensureRecurringHorizon, generateRecurringTransactions, nextRecurringDate, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "./recurring-engine";
 import type { EntityCollection } from "../../infrastructure/persistence/repository";
 
 const accounts=[{id:"a",name:"Conta",type:"CHECKING" as const,openingBalanceCents:0,active:true}];
@@ -64,6 +64,24 @@ describe("recurring engine",()=>{
      {date:"2026-03-31",amount:200000,status:"RECEIVED",description:"Salário ajustado"},
    ]);
  });
+ it("maintains the recurring horizon without duplicating existing occurrences",()=>{
+   const rule=createRecurringRule(base);
+   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
+   const first=generateRecurringTransactions(data,rule,"2026-03-31");
+   const maintained=ensureRecurringHorizon(first.data,"2026-06-30");
+   expect(maintained.transactions.map(t=>t.date)).toEqual([
+     "2026-01-31","2026-02-28","2026-03-31","2026-04-30","2026-05-31","2026-06-30"
+   ]);
+   const again=ensureRecurringHorizon(maintained,"2026-06-30");
+   expect(again.transactions).toHaveLength(6);
+   expect(again.recurringRules[0].transactionIds).toHaveLength(6);
+ });
+ it("does not maintain inactive recurring rules",()=>{
+   const rule=createRecurringRule({...base,active:false});
+   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
+   expect(ensureRecurringHorizon(data,"2026-06-30")).toBe(data);
+ });
+
  it("allows editing a rule before its first generation",()=>{
    const rule=createRecurringRule(base);
    expect(()=>validateRecurringRuleUpdate(rule,{...rule,amountCents:200000})).not.toThrow();
