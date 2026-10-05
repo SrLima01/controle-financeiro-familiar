@@ -287,6 +287,8 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [expandedRecurringRuleId,setExpandedRecurringRuleId]=useState<string|null>(null);
  const [showAllRecurring,setShowAllRecurring]=useState(false);
  const [transactionSearch,setTransactionSearch]=useState("");
+ const [recurringScope,setRecurringScope]=useState<"ONE"|"FUTURE"|"CANCEL"|null>(null);
+ const [recurringScopeResolver,setRecurringScopeResolver]=useState<((v:"ONE"|"FUTURE"|"CANCEL")=>void)|null>(null);
  const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const normalizedSearch=transactionSearch.trim().toLocaleLowerCase("pt-BR");
@@ -299,11 +301,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  }
  async function askRecurringScope(tx:Transaction){
    const rule=data.recurringRules.find(r=>r.transactionIds.includes(tx.id)); if(!rule) return "ONE" as const;
-   if(!confirm("Alterar somente este lançamento?\n\nOK = somente este\nCancelar = escolher se deseja aplicar aos próximos também.")) {
-     if(confirm("Aplicar esta alteração a este lançamento e aos próximos da mesma recorrência?\n\nOK = este e próximos\nCancelar = voltar sem salvar.")) return "FUTURE" as const;
-     return "CANCEL" as const;
-   }
-   return "ONE" as const;
+   return await new Promise<"ONE"|"FUTURE"|"CANCEL">(resolve=>{ setRecurringScopeResolver(()=>resolve); setRecurringScope("ONE"); });
  }
  async function save(){
    setError("");
