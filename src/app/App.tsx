@@ -5,7 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import type { EntityCollection } from "../infrastructure/persistence/repository";
 import type { Person, Category } from "../domain/types/entities";
 import { IndexedDbFinanceRepository, hasLegacyDatabase, readLegacyLocalData } from "../infrastructure/persistence/indexeddb";
-import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateAccountUpdate, validateTransaction } from "../domain/transactions/financial-engine";
+import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateAccountUpdate, validateTransaction, validateTransactionUpdate } from "../domain/transactions/financial-engine";
 import { calculateCardAvailableLimit, calculateCardCreditBalance, calculateCardOutstanding, getCardInvoice, allocateCardPayments, invoiceClosingDate, invoiceDueDateFromClosing, validateCreditCard, validateCreditCardUpdate } from "../domain/cards/card-engine";
 import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
 import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
@@ -305,7 +305,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
        const available=calculateCardAvailableLimit(card,data.transactions)+(editing?.creditCardId===card.id&&editing.type==="EXPENSE"?editing.amountCents:0);
        if(amountCents>available) throw new Error(`Limite disponível insuficiente. Disponível: ${money(available)}.`);
      }
-     if(editing) validateRecurringTransactionUpdate(editing,tx,data.recurringRules);
+     if(editing){ validateTransactionUpdate(editing,tx); validateRecurringTransactionUpdate(editing,tx,data.recurringRules); }
      validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});
      const next={...data,transactions:editing?data.transactions.map(t=>t.id===tx.id?tx:t):[...data.transactions,tx]};
      setBusy(true);await onChange(next);reset();
@@ -342,7 +342,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    })}</section></>}
    {view==="new"&&launchMode==="recurring"&&!editing&&<Recurring data={data} onChange={onChange} embedded onCreated={()=>setLaunchMode("unique")} onCancel={()=>setLaunchMode("unique")}/>}
    {view==="new"&&launchMode==="unique"&&<section className="panel form-panel"><h2>{editing?"Editar lançamento":"Novo lançamento"}</h2><div className="form-grid">
-     <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as TransactionType;setType(v);setCategoryId("");setCreditCardId("");if(v!=="EXPENSE")setParcelado(false)}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
+     <label>Tipo<select value={type} disabled={!!editing} onChange={e=>{const v=e.target.value as TransactionType;setType(v);setCategoryId("");setCreditCardId("");if(v!=="EXPENSE")setParcelado(false)}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
      <label>Status<select value={status} onChange={e=>setStatus(e.target.value as RecurringRule["status"])}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
      <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} disabled={recurringGenerated} required/></label>
      <label>Valor total<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00" required/></label>
