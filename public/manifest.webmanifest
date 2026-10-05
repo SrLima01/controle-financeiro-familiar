@@ -1,0 +1,17 @@
+{
+  "name":"Controle Financeiro Familiar",
+  "short_name":"Controle Familiar",
+  "description":"Controle financeiro familiar com contas, cartões, lançamentos e sincronização.",
+  "lang":"pt-BR",
+  "dir":"ltr",
+  "start_url":"/",
+  "scope":"/",
+  "display":"standalone",
+  "orientation":"portrait-primary",
+  "theme_color":"#172033",
+  "background_color":"#f5f7fb",
+  "icons":[
+    {"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"},
+    {"src":"/icon-maskable.svg","sizes":"any","type":"image/svg+xml","purpose":"maskable"}
+  ]
+}
