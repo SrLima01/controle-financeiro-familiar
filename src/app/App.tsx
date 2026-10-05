@@ -14,7 +14,7 @@ import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator"
 import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
 import { assertCents } from "../domain/money/cents";
 import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
-import { applyRecurringRuleToFutureTransactions, createRecurringRule, deactivateRecurringRule, generateRecurringTransactions, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
+import { applyRecurringRuleToFutureTransactions, createRecurringRule, deactivateRecurringRule, ensureRecurringHorizon, generateRecurringTransactions, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
 import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
 import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
 import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
@@ -869,6 +869,17 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     })();
     return ()=>{cancelled=true};
   },[family.id]);
+  const recurringMaintenanceRef=useRef(false);
+  useEffect(()=>{
+    if(loading||recurringMaintenanceRef.current||!data.recurringRules.some(rule=>rule.active)) return;
+    const horizon=new Date();
+    horizon.setMonth(horizon.getMonth()+12);
+    const horizonDate=`${horizon.getFullYear()}-${String(horizon.getMonth()+1).padStart(2,"0")}-${String(horizon.getDate()).padStart(2,"0")}`;
+    const maintained=ensureRecurringHorizon(data,horizonDate);
+    if(maintained===data) return;
+    recurringMaintenanceRef.current=true;
+    void persist(maintained).catch(e=>setError(e instanceof Error?e.message:"Não foi possível atualizar as recorrências automaticamente.")).finally(()=>{recurringMaintenanceRef.current=false;});
+  },[loading,data]);
   async function persist(next:EntityCollection){
     setError("");
     await repo.replaceAll(next);
