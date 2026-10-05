@@ -292,7 +292,14 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const recurringScopeResolverRef=useRef<((scope:"ONE"|"FUTURE"|"CANCEL")=>void)|null>(null);
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const normalizedSearch=transactionSearch.trim().toLocaleLowerCase("pt-BR");
- const visible=data.transactions.filter(t=>(filter==="ALL"||t.type===filter)&&(!normalizedSearch||[t.description,t.date,t.status,labelType(t)].join(" ").toLocaleLowerCase("pt-BR").includes(normalizedSearch))).sort((a,b)=>b.date.localeCompare(a.date));
+ function transactionSearchText(t:Transaction){
+   const accountNames=data.accounts.filter(a=>a.id===t.accountId||a.id===t.destinationAccountId).map(a=>a.name);
+   const cardNames=data.cards.filter(c=>c.id===t.creditCardId).map(c=>c.name);
+   const categoryNames=data.categories.filter(c=>c.id===t.categoryId).map(c=>c.name);
+   const personNames=data.people.filter(p=>p.id===t.personId).map(p=>p.name);
+   return [t.description,t.date,t.status,labelType(t),...accountNames,...cardNames,...categoryNames,...personNames].join(" ").toLocaleLowerCase("pt-BR");
+ }
+ const visible=data.transactions.filter(t=>(filter==="ALL"||t.type===filter)&&(!normalizedSearch||transactionSearchText(t).includes(normalizedSearch))).sort((a,b)=>b.date.localeCompare(a.date));
 
  function reset(){setEditing(null);setLaunchMode("unique");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
  function edit(t:Transaction){
@@ -386,13 +393,13 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  function labelType(t:Transaction){return t.type==="TRANSFER"?"Transferência":t.type==="CARD_PAYMENT"?"Pagamento de cartão":t.type==="INCOME"?"Entrada":t.creditCardId?"Compra no cartão":"Saída"}
  return <div className="page-content">
    <div className="page-heading"><div><span className="eyebrow">Movimentação</span><h1>Lançamentos</h1></div><button className="primary compact" onClick={reset}>+ Novo lançamento</button></div>
-   <div className="subnav transaction-tabs"><button className={view==="new"?"active":""} onClick={()=>{setView("new");setError("")}}>Novo lançamento</button><button className={view==="history"?"active":""} onClick={()=>{setView("history");setError("")}}>Lançamentos feitos <span>({data.transactions.length})</span></button></div>
+   <div className="subnav transaction-tabs"><button className={view==="new"?"active":""} onClick={()=>{setView("new");setError("")}}>Novo lançamento</button><button className={view==="history"?"active":""} onClick={()=>{setView("history");setError("")}}>Histórico <span>({data.transactions.length})</span></button></div>
    {error&&<div className="global-alert">{error}</div>}
    {view==="new"&&<div className="subnav launch-mode-tabs"><button className={launchMode==="unique"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("unique");setError("")}}>Lançamento único</button><button className={launchMode==="recurring"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("recurring");setError("")}}>Lançamento recorrente</button></div>}
    {view==="history"&&<>
      <div className="transaction-search"><span aria-hidden="true">⌕</span><input value={transactionSearch} onChange={e=>setTransactionSearch(e.target.value)} placeholder="Buscar lançamento, conta, data..." aria-label="Buscar lançamentos"/></div>\n     <div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
      {(() => {
-       const recurringGroups=data.recurringRules.map(rule=>({rule,transactions:rule.transactionIds.map(id=>data.transactions.find(t=>t.id===id)).filter((t):t is Transaction=>Boolean(t)).filter(t=>(filter==="ALL"||t.type===filter)&&(!normalizedSearch||[rule.description,t.description,t.date,t.status,labelType(t)].join(" ").toLocaleLowerCase("pt-BR").includes(normalizedSearch))).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id))})).filter(group=>group.transactions.length>0);
+       const recurringGroups=data.recurringRules.map(rule=>({rule,transactions:rule.transactionIds.map(id=>data.transactions.find(t=>t.id===id)).filter((t):t is Transaction=>Boolean(t)).filter(t=>(filter==="ALL"||t.type===filter)&&(!normalizedSearch||[rule.description,transactionSearchText(t)].join(" ").toLocaleLowerCase("pt-BR").includes(normalizedSearch))).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id))})).filter(group=>group.transactions.length>0);
        const recurringIds=new Set(data.recurringRules.flatMap(rule=>rule.transactionIds));
        const standalone=data.transactions.filter(t=>(filter==="ALL"||t.type===filter)&&!recurringIds.has(t.id)&&(!normalizedSearch||[t.description,t.date,t.status,labelType(t)].join(" ").toLocaleLowerCase("pt-BR").includes(normalizedSearch))).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
        return <section className="panel transaction-list">
