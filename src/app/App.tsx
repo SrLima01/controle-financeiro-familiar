@@ -383,7 +383,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
            {standalone.map(t=>{
              const group=t.installmentGroupId?data.installmentGroups.find(g=>g.id===t.installmentGroupId):undefined;
              const n=group?getInstallmentNumber(group,t.id):undefined;
-             return <div className="transaction-row" key={t.id}><div><strong>{t.description||labelType(t)}</strong><span>{t.date} · {labelType(t)} · {group&&\`Parcela \${n}/\${group.installmentCount}\`}</span></div>
+             return <div className="transaction-row" key={t.id}><div><strong>{t.description||labelType(t)}</strong><span>{t.date} · {labelType(t)} · {group&&("Parcela "+n+"/"+group.installmentCount)}</span></div>
                <div className="transaction-value"><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":"+"}{money(t.amountCents)}</strong><div className="row-actions">{group?<>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>}</>:<><button className="link-button" onClick={()=>edit(t)}>Editar</button>{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}</div></div></div>
            })}
          </>}
