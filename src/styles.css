@@ -159,3 +159,6 @@ html[data-theme="dark"] .transaction-group{border-color:#303849}
 .transaction-search span{font-size:22px;color:var(--muted,#667085);line-height:1}
 .transaction-search input{width:100%;border:0;outline:0;background:transparent;color:inherit;font:inherit}
 html[data-theme="dark"] .transaction-search{background:#171d29;border-color:#303849}
+
+.recurring-scope-slot{position:relative}.scope-modal{position:fixed;z-index:50;left:50%;top:50%;transform:translate(-50%,-50%);width:min(92vw,420px);padding:22px;border-radius:18px;background:var(--surface,#fff);box-shadow:0 20px 60px rgba(0,0,0,.25);display:grid;gap:12px}.scope-modal h3{margin:0}.scope-modal p{margin:0}.scope-modal .primary,.scope-modal .secondary{width:100%}.scope-modal .icon-button{justify-self:center}.recurring-scope-slot:has(.scope-modal)::before{content:"";position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:49}
+html[data-theme="dark"] .scope-modal{background:#171d29}
