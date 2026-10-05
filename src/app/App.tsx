@@ -193,6 +193,7 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
   }
   async function archive(a:Account){
     if(!confirm("Arquivar a conta \"" + a.name + "\"? O histórico será preservado."))return;
+    try{validateAccountArchive(a,data.recurringRules)}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");return;}
     setBusy(true);setError("");try{await onChange({...data,accounts:data.accounts.map(x=>x.id===a.id?{...x,active:false}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");}finally{setBusy(false);}
   }
   return <div className="page-content">
