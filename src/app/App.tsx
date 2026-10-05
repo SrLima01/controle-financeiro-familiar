@@ -284,6 +284,8 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [filter,setFilter]=useState<"ALL"|"INCOME"|"EXPENSE"|"TRANSFER"|"CARD_PAYMENT">("ALL");
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const [view,setView]=useState<"new"|"history">("new");
+ const [expandedRecurringRuleId,setExpandedRecurringRuleId]=useState<string|null>(null);
+ const [showAllRecurring,setShowAllRecurring]=useState(false);
  const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
@@ -292,7 +294,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  function reset(){setEditing(null);setLaunchMode("unique");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
  function edit(t:Transaction){
    if(t.installmentGroupId){setError("Parcelas vinculadas devem ser gerenciadas pelo grupo. Use os comandos de cancelamento abaixo.");return;}
-   setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new");setLaunchMode("unique")
+   setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new");setLaunchMode("unique");setExpandedRecurringRuleId(null);setShowAllRecurring(false)
  }
  async function save(){
    setError("");
@@ -318,7 +320,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
        return;
      }
      const transactionDescription=description.trim() || (type==="TRANSFER" ? "Transferência" : "");
-     const tx:Transaction={id:editing?.id??crypto.randomUUID(),date,type,status,amountCents,description:transactionDescription,...(categoryId?{categoryId}:{}),...(accountId?{accountId}:{}),...(destinationAccountId?{destinationAccountId}:{}),...(creditCardId?{creditCardId}:{}),...(personId?{personId}: {})};
+     const tx:Transaction={id:editing?.id??crypto.randomUUID(),date,type,status,amountCents,description:transactionDescription,...(categoryId?{categoryId}:{}),...(accountId?{accountId}:{}),...(destinationAccountId?{destinationAccountId}:{}),...(creditCardId?{creditCardId}:{}),...(personId?{personId}: {}),...(editing?.recurringScheduledDate?{recurringScheduledDate:editing.recurringScheduledDate}: {})};
      if(type==="EXPENSE"&&creditCardId){
        const card=data.cards.find(c=>c.id===creditCardId); if(!card) throw new Error("Cartão inválido.");
        const available=calculateCardAvailableLimit(card,data.transactions)+(editing?.creditCardId===card.id&&editing.type==="EXPENSE"?editing.amountCents:0);
@@ -349,22 +351,51 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    <div className="subnav transaction-tabs"><button className={view==="new"?"active":""} onClick={()=>{setView("new");setError("")}}>Novo lançamento</button><button className={view==="history"?"active":""} onClick={()=>{setView("history");setError("")}}>Lançamentos feitos <span>({data.transactions.length})</span></button></div>
    {error&&<div className="global-alert">{error}</div>}
    {view==="new"&&<div className="subnav launch-mode-tabs"><button className={launchMode==="unique"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("unique");setError("")}}>Lançamento único</button><button className={launchMode==="recurring"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("recurring");setError("")}}>Lançamento recorrente</button></div>}
-   {view==="history"&&<><div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
-   <section className="panel transaction-list">{visible.length===0?<Empty text="Nenhum lançamento encontrado."/>:visible.map(t=>{
-     const group=t.installmentGroupId?data.installmentGroups.find(g=>g.id===t.installmentGroupId):undefined;
-     const n=group?getInstallmentNumber(group,t.id):undefined;
-     const recurringRule=data.recurringRules.find(rule=>rule.transactionIds.includes(t.id));
-     return <div className={recurringRule?"transaction-row transaction-row-recurring":"transaction-row"} key={t.id}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date} · {labelType(t)} · {t.status}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
-       <div className="transaction-value"><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":"+"}{money(t.amountCents)}</strong><div className="row-actions">
-         {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>} </> :
-           <>{<button className="link-button" onClick={()=>edit(t)}>Editar</button>}{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
-       </div></div></div>
-   })}</section></>}
+   {view==="history"&&<>
+     <div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
+     {(() => {
+       const recurringGroups=data.recurringRules.map(rule=>({rule,transactions:rule.transactionIds.map(id=>data.transactions.find(t=>t.id===id)).filter((t):t is Transaction=>Boolean(t)).filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id))})).filter(group=>group.transactions.length>0);
+       const recurringIds=new Set(data.recurringRules.flatMap(rule=>rule.transactionIds));
+       const standalone=data.transactions.filter(t=>(filter==="ALL"||t.type===filter)&&!recurringIds.has(t.id)).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+       return <section className="panel transaction-list">
+         {standalone.length===0&&recurringGroups.length===0?<Empty text="Nenhum lançamento encontrado."/>:<>
+           {recurringGroups.map(({rule,transactions})=>{
+             const expanded=expandedRecurringRuleId===rule.id;
+             const shown=expanded&&(showAllRecurring?transactions:transactions.slice(0,12));
+             const paidCount=transactions.filter(t=>t.status==="PAID"||t.status==="RECEIVED").length;
+             const freq=({WEEKLY:"Semanal",BIWEEKLY:"Quinzenal",MONTHLY:"Mensal",BIMONTHLY:"Bimestral",QUARTERLY:"Trimestral",SEMIANNUAL:"Semestral",ANNUAL:"Anual"} as Record<RecurringFrequency,string>)[rule.frequency];
+             return <article className={expanded?"transaction-group transaction-group-open":"transaction-group"} key={rule.id}>
+               <button className="transaction-group-head" type="button" onClick={()=>{setExpandedRecurringRuleId(expanded?null:rule.id);setShowAllRecurring(false)}}>
+                 <span className="transaction-group-icon" aria-hidden="true">↻</span>
+                 <span className="transaction-group-main"><strong>{rule.description}</strong><small>{freq} · {money(rule.amountCents)} · {transactions.length} ocorrências</small></span>
+                 <span className="transaction-group-summary"><strong>{paidCount}/{transactions.length}</strong><small>{expanded?"Ocultar":"Ver lançamentos"}</small></span>
+                 <span className="transaction-group-chevron" aria-hidden="true">{expanded?"⌃":"⌄"}</span>
+               </button>
+               {expanded&&<div className="transaction-group-body">
+                 <div className="transaction-group-toolbar"><span>Ocorrências desta recorrência</span><button className="link-button" onClick={()=>{setView("new");setLaunchMode("recurring");setExpandedRecurringRuleId(null)}}>Editar regra</button></div>
+                 {shown.map(t=><div className="transaction-row transaction-row-nested" key={t.id}>
+                   <div><strong>{t.date}{t.date!==t.recurringScheduledDate&&<span className="transaction-adjusted-badge">Data ajustada</span>}</strong><span>{labelType(t)} · {t.status}</span></div>
+                   <div className="transaction-value"><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":"+"}{money(t.amountCents)}</strong><div className="row-actions"><button className="link-button" onClick={()=>edit(t)}>Ajustar</button>{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</div></div>
+                 </div>)}
+                 {transactions.length>12&&<div className="transaction-group-footer"><button className="secondary compact" onClick={()=>setShowAllRecurring(v=>!v)}>{showAllRecurring?"Mostrar só as 12 mais recentes":"Mostrar todas as ocorrências ("+transactions.length+")"}</button></div>}
+               </div>}
+             </article>
+           })}
+           {standalone.map(t=>{
+             const group=t.installmentGroupId?data.installmentGroups.find(g=>g.id===t.installmentGroupId):undefined;
+             const n=group?getInstallmentNumber(group,t.id):undefined;
+             return <div className="transaction-row" key={t.id}><div><strong>{t.description||labelType(t)}</strong><span>{t.date} · {labelType(t)} · {group&&\`Parcela \${n}/\${group.installmentCount}\`}</span></div>
+               <div className="transaction-value"><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":"+"}{money(t.amountCents)}</strong><div className="row-actions">{group?<>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>}</>:<><button className="link-button" onClick={()=>edit(t)}>Editar</button>{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}</div></div></div>
+           })}
+         </>}
+       </section>
+     })()}
+   </>}
    {view==="new"&&launchMode==="recurring"&&!editing&&<Recurring data={data} onChange={onChange} embedded onCreated={()=>setLaunchMode("unique")} onCancel={()=>setLaunchMode("unique")}/>}
    {view==="new"&&launchMode==="unique"&&<section className="panel form-panel"><h2>{editing?"Editar lançamento":"Novo lançamento"}</h2><div className="form-grid">
      <label>Tipo<select value={type} disabled={!!editing} onChange={e=>{const v=e.target.value as TransactionType;setType(v);setCategoryId("");setCreditCardId("");if(v!=="EXPENSE")setParcelado(false)}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
      <label>Status<select value={status} onChange={e=>setStatus(e.target.value as RecurringRule["status"])}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
-     <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} disabled={recurringGenerated} required/></label>
+     <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} required/></label>
      <label>Valor total<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00" required/></label>
      <label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Ex.: Mercado"/></label>
      {(type==="INCOME"||type==="EXPENSE")&&<div className="category-field"><label>Categoria<select value={categoryId} onChange={e=>{if(e.target.value===CATEGORY_CREATE_VALUE){setCreatingCategory(true);return;}setCategoryId(e.target.value)}}><option value="">Selecione</option>{data.categories.filter(c=>(c.active&&c.kind===(type==="INCOME"?"INCOME":"EXPENSE"))||c.id===editing?.categoryId).map(c=><option key={c.id} value={c.id}>{c.emoji??categoryEmojiForName(c.name)} {c.name}{c.active?"":" (arquivada)"}</option>)}<option value={CATEGORY_CREATE_VALUE}>＋ Criar nova categoria…</option></select></label><button type="button" className="secondary compact category-add-button" onClick={()=>setCreatingCategory(v=>!v)}>＋ Criar nova categoria</button>{creatingCategory&&<QuickCategoryCreate kind={type==="INCOME"?"INCOME":"EXPENSE"} data={data} onChange={onChange} onCreated={category=>{setCategoryId(category.id);setCreatingCategory(false);}} onCancel={()=>setCreatingCategory(false)}/>}</div>}
