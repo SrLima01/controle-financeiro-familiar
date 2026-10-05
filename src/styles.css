@@ -159,3 +159,22 @@ html[data-theme="dark"] .transaction-group{border-color:#303849}
 .transaction-search span{font-size:22px;color:var(--muted,#667085);line-height:1}
 .transaction-search input{width:100%;border:0;outline:0;background:transparent;color:inherit;font:inherit}
 html[data-theme="dark"] .transaction-search{background:#171d29;border-color:#303849}
+
+
+/* Modal de escopo para alterações em ocorrências recorrentes */
+.recurring-scope-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:18px;background:rgba(10,16,28,.58);backdrop-filter:blur(3px)}
+.recurring-scope-modal{width:min(520px,100%);max-height:calc(100vh - 36px);overflow:auto;background:var(--surface,#fff);color:var(--text,#172033);border:1px solid var(--border,#e2e8f0);border-radius:22px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.28)}
+.recurring-scope-icon{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--primary-soft,#eef2ff);color:var(--primary,#415a9b);font-size:23px;font-weight:800;margin-bottom:14px}
+.recurring-scope-content h2{margin:5px 0 10px;font-size:21px;line-height:1.2}
+.recurring-scope-content p{margin:8px 0;color:var(--muted,#697386);font-size:14px;line-height:1.5}
+.recurring-scope-help{font-size:13px!important}
+.recurring-scope-actions{display:grid;gap:8px;margin-top:20px}
+.recurring-scope-actions button{width:100%;margin:0}
+.recurring-scope-actions .link-button{padding:9px 12px}
+html[data-theme="dark"] .recurring-scope-backdrop{background:rgba(0,0,0,.68)}
+html[data-theme="dark"] .recurring-scope-modal{background:#171d28;color:#e7ebf3;border-color:#303849}
+@media(max-width:520px){
+ .recurring-scope-backdrop{padding:12px;align-items:end}
+ .recurring-scope-modal{border-radius:22px 22px 16px 16px;padding:19px;max-height:calc(100vh - 24px)}
+ .recurring-scope-content h2{font-size:19px}
+}
