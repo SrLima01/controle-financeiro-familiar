@@ -69,3 +69,56 @@
 .report-section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}.report-section-heading h2{margin:0}.report-section-heading span{display:block;margin-top:4px;color:var(--muted,#68717d);font-size:13px}
 .report-bar-row{display:grid;gap:3px}.report-bar-track{height:6px;border-radius:999px;background:#edf0f4;overflow:hidden}.report-bar-fill{height:100%;border-radius:999px;background:#415a9b;transition:width .25s ease}.report-bar-fill.income{background:#2f855a}.report-bar-fill.person{background:#b7791f}.report-bar-fill.monthly{background:#3182ce}
 @media (max-width:520px){.report-section-heading{display:block}.report-row{gap:10px}.report-row strong{white-space:nowrap}}
+
+
+/* Tema escuro — aplicado globalmente sem alterar os dados financeiros. */
+html[data-theme="dark"] body{background:#10141c;color:#e7ebf3}
+html[data-theme="dark"] .shell{background:#10141c}
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .bottom-nav,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .metric,
+html[data-theme="dark"] .family-card,
+html[data-theme="dark"] .form-panel,
+html[data-theme="dark"] .report-section,
+html[data-theme="dark"] .card-item{background:#171d28;border-color:#2a3342;color:#e7ebf3}
+html[data-theme="dark"] .topbar{border-bottom-color:#2a3342}
+html[data-theme="dark"] .bottom-nav{border-top-color:#2a3342}
+html[data-theme="dark"] .topbar span,
+html[data-theme="dark"] .muted,
+html[data-theme="dark"] small,
+html[data-theme="dark"] .metric span,
+html[data-theme="dark"] .empty,
+html[data-theme="dark"] .loading,
+html[data-theme="dark"] .form-note,
+html[data-theme="dark"] .eyebrow,
+html[data-theme="dark"] .account-row span,
+html[data-theme="dark"] .transaction-row span,
+html[data-theme="dark"] .card-item span{color:#9da8ba}
+html[data-theme="dark"] .account-row,
+html[data-theme="dark"] .transaction-row{border-color:#2a3342}
+html[data-theme="dark"] .primary{background:#e7ebf3;color:#111722}
+html[data-theme="dark"] .secondary{background:#273142;color:#e7ebf3}
+html[data-theme="dark"] .icon-button,
+html[data-theme="dark"] .link-button{color:#aebff0}
+html[data-theme="dark"] .form-stack input,
+html[data-theme="dark"] .inline-form input,
+html[data-theme="dark"] .form-grid input,
+html[data-theme="dark"] .form-grid select,
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea{background:#111722;color:#e7ebf3;border-color:#364154}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{color:#718096}
+html[data-theme="dark"] .transaction-filters button{background:#171d28;color:#9da8ba;border-color:#364154}
+html[data-theme="dark"] .transaction-filters button.active{background:#e7ebf3;color:#111722;border-color:#e7ebf3}
+html[data-theme="dark"] .bottom-nav button{color:#8995a8}
+html[data-theme="dark"] .bottom-nav button.active{color:#b9c7f2}
+html[data-theme="dark"] .auth-page{background:linear-gradient(180deg,#10141c,#171d28)}
+html[data-theme="dark"] .brand-mark{background:#e7ebf3;color:#111722}
+html[data-theme="dark"] .split-line{background:#2a3342}
+html[data-theme="dark"] .split-line span{background:#171d28;color:#8995a8}
+html[data-theme="dark"] .alert.error,
+html[data-theme="dark"] .global-alert{background:#3a2024;color:#ffb4b4}
+html[data-theme="dark"] .sync-dot{background:#1c2a20;border-color:#36533d}
+html[data-theme="dark"] .hero-card{background:#0b0f16}
