@@ -252,6 +252,20 @@ function QuickCategoryCreate({kind,data,onChange,onCreated,onCancel}:{kind:Categ
  </div>;
 }
 
+function validateActiveReferencesForUse(tx:Transaction,data:EntityCollection,previous?:Transaction){
+  const accountIds=[tx.accountId,tx.destinationAccountId].filter((id):id is string=>!!id);
+  for(const id of accountIds){
+    const account=data.accounts.find(a=>a.id===id);
+    const wasAlreadyReferenced=previous?.accountId===id||previous?.destinationAccountId===id;
+    if(account&&!account.active&&!wasAlreadyReferenced) throw new Error("Contas arquivadas não podem ser usadas em novos lançamentos. Reative a conta primeiro.");
+  }
+  if(tx.creditCardId){
+    const card=data.cards.find(c=>c.id===tx.creditCardId);
+    const wasAlreadyReferenced=previous?.creditCardId===tx.creditCardId;
+    if(card&&!card.active&&!wasAlreadyReferenced) throw new Error("Cartões arquivados não podem ser usados em novos lançamentos. Reative o cartão primeiro.");
+  }
+}
+
 function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
  const [editing,setEditing]=useState<Transaction|null>(null);
  const [type,setType]=useState<TransactionType>("EXPENSE");
@@ -311,6 +325,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
        if(amountCents>available) throw new Error(`Limite disponível insuficiente. Disponível: ${money(available)}.`);
      }
      if(editing){ validateTransactionUpdate(editing,tx); validateRecurringTransactionUpdate(editing,tx,data.recurringRules); }
+     validateActiveReferencesForUse(tx,data,editing??undefined);
      validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});
      const next={...data,transactions:editing?data.transactions.map(t=>t.id===tx.id?tx:t):[...data.transactions,tx]};
      setBusy(true);await onChange(next);reset();
@@ -765,7 +780,7 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
  function reset(){setEditing(null);setName("");setAccountId("");setLimit("");setClosingDay("10");setDueDay("20");setError("")}
  function edit(c:CreditCard){setEditing(c);setName(c.name);setAccountId(c.accountId);setLimit((c.creditLimitCents/100).toFixed(2).replace(".",","));setClosingDay(String(c.closingDay));setDueDay(String(c.dueDay));setError("")}
  async function save(){setError("");try{const cents=parseAmount(limit),close=Number(closingDay),due=Number(dueDay);if(!name.trim()||!accountId||!Number.isInteger(close)||close<1||close>31||!Number.isInteger(due)||due<1||due>31)throw new Error("Preencha nome, conta e dias válidos.");const card:CreditCard={id:editing?.id??crypto.randomUUID(),name:name.trim(),accountId,creditLimitCents:cents,closingDay:close,dueDay:due,active:true};if(editing){validateCreditCardUpdate(editing,card,data.accounts.map(a=>a.id),data.transactions)}else{validateCreditCard(card,data.accounts.filter(a=>a.active).map(a=>a.id))}const next={...data,cards:editing?data.cards.map(c=>c.id===card.id?card:c):[...data.cards,card]};setBusy(true);await onChange(next);reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar o cartão.")}finally{setBusy(false)}}
- async function archive(c:CreditCard){if(!confirm("Arquivar este cartão? O histórico será preservado."))return;setBusy(true);setError("");try{await onChange({...data,cards:data.cards.map(x=>x.id===c.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
+ async function archive(c:CreditCard){if(data.recurringRules.some(r=>r.active&&r.creditCardId===c.id)){setError("Este cartão está vinculado a uma recorrência ativa. Desative ou altere a recorrência antes de arquivar o cartão.");return}if(!confirm("Arquivar este cartão? O histórico será preservado."))return;setBusy(true);setError("");try{await onChange({...data,cards:data.cards.map(x=>x.id===c.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
  async function restore(c:CreditCard){setBusy(true);setError("");try{await onChange({...data,cards:data.cards.map(x=>x.id===c.id?{...x,active:true}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível reativar.")}finally{setBusy(false)}}
  async function payInvoice(c:CreditCard){
    const invoice=getCardInvoice(c,data.transactions,todayFinancialDate());
