@@ -408,7 +408,7 @@ function Recurring({data,onChange,embedded=false,onCreated,onCancel}:{data:Entit
    setBusy(true);setError("");
    try{
      const paidStatus:Transaction["status"]=rule.type==="INCOME"?"RECEIVED":"PAID";
-     const nextStatus=tx.status===paidStatus?"PENDING":paidStatus;
+     const nextStatus:Transaction["status"]=tx.status===paidStatus?"PENDING":paidStatus;
      const nextTx={...tx,status:nextStatus};
      validateTransaction(nextTx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions.filter(t=>t.id!==tx.id)});
      await onChange({...data,transactions:data.transactions.map(t=>t.id===tx.id?nextTx:t)});
