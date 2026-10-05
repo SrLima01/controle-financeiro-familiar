@@ -286,14 +286,24 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [view,setView]=useState<"new"|"history">("new");
  const [expandedRecurringRuleId,setExpandedRecurringRuleId]=useState<string|null>(null);
  const [showAllRecurring,setShowAllRecurring]=useState(false);
+ const [transactionSearch,setTransactionSearch]=useState("");
  const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
- const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
+ const normalizedSearch=transactionSearch.trim().toLocaleLowerCase("pt-BR");
+ const visible=data.transactions.filter(t=>(filter==="ALL"||t.type===filter)&&(!normalizedSearch||[t.description,t.date,t.status,labelType(t)].join(" ").toLocaleLowerCase("pt-BR").includes(normalizedSearch))).sort((a,b)=>b.date.localeCompare(a.date));
 
  function reset(){setEditing(null);setLaunchMode("unique");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
  function edit(t:Transaction){
    if(t.installmentGroupId){setError("Parcelas vinculadas devem ser gerenciadas pelo grupo. Use os comandos de cancelamento abaixo.");return;}
    setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new");setLaunchMode("unique");setExpandedRecurringRuleId(null);setShowAllRecurring(false)
+ }
+ async function askRecurringScope(tx:Transaction){
+   const rule=data.recurringRules.find(r=>r.transactionIds.includes(tx.id)); if(!rule) return "ONE" as const;
+   if(!confirm("Alterar somente este lançamento?\n\nOK = somente este\nCancelar = escolher se deseja aplicar aos próximos também.")) {
+     if(confirm("Aplicar esta alteração a este lançamento e aos próximos da mesma recorrência?\n\nOK = este e próximos\nCancelar = voltar sem salvar.")) return "FUTURE" as const;
+     return "CANCEL" as const;
+   }
+   return "ONE" as const;
  }
  async function save(){
    setError("");
@@ -328,7 +338,29 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
      if(editing){ validateTransactionUpdate(editing,tx); validateRecurringTransactionUpdate(editing,tx,data.recurringRules); }
      validateActiveReferencesForUse(tx,data,editing??undefined);
      validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});
-     const next={...data,transactions:editing?data.transactions.map(t=>t.id===tx.id?tx:t):[...data.transactions,tx]};
+     let nextTransactions=editing?data.transactions.map(t=>t.id===tx.id?tx:t):[...data.transactions,tx];
+     let nextRules=data.recurringRules;
+     if(editing){
+       const rule=data.recurringRules.find(r=>r.transactionIds.includes(editing.id));
+       if(rule){
+         const scope=await askRecurringScope(editing);
+         if(scope==="CANCEL") return;
+         if(scope==="FUTURE"){
+           const originalScheduled=editing.recurringScheduledDate??editing.date;
+           const dayDelta=Math.round((new Date(tx.date+"T12:00:00").getTime()-new Date(originalScheduled+"T12:00:00").getTime())/86400000);
+           nextTransactions=nextTransactions.map(item=>{
+             if(item.id===editing.id)return tx;
+             if(!rule.transactionIds.includes(item.id))return item;
+             const scheduled=item.recurringScheduledDate??item.date;
+             if(scheduled<originalScheduled)return item;
+             const shiftedDate=dayDelta===0?item.date:new Date(new Date(item.date+"T12:00:00").getTime()+dayDelta*86400000).toISOString().slice(0,10);
+             return {...item,date:shiftedDate,recurringScheduledDate:dayDelta===0?item.recurringScheduledDate:(new Date(new Date(scheduled+"T12:00:00").getTime()+dayDelta*86400000).toISOString().slice(0,10)),amountCents:tx.amountCents,status:item.id===editing.id?tx.status:tx.status,description:tx.description,categoryId:tx.categoryId,accountId:tx.accountId,creditCardId:tx.creditCardId,personId:tx.personId};
+           });
+           nextRules=data.recurringRules.map(r=>r.id===rule.id?{...r,startDate:rule.startDate===originalScheduled?tx.date:rule.startDate,amountCents:tx.amountCents,status:tx.status,description:tx.description,categoryId:tx.categoryId,accountId:tx.accountId,creditCardId:tx.creditCardId,personId:tx.personId}:r);
+         }
+       }
+     }
+     const next={...data,transactions:nextTransactions,recurringRules:nextRules};
      setBusy(true);await onChange(next);reset();
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false)}
  }
@@ -351,11 +383,11 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    {error&&<div className="global-alert">{error}</div>}
    {view==="new"&&<div className="subnav launch-mode-tabs"><button className={launchMode==="unique"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("unique");setError("")}}>Lançamento único</button><button className={launchMode==="recurring"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("recurring");setError("")}}>Lançamento recorrente</button></div>}
    {view==="history"&&<>
-     <div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
+     <div className="transaction-search"><span aria-hidden="true">⌕</span><input value={transactionSearch} onChange={e=>setTransactionSearch(e.target.value)} placeholder="Buscar lançamento, conta, data..." aria-label="Buscar lançamentos"/></div>\n     <div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
      {(() => {
-       const recurringGroups=data.recurringRules.map(rule=>({rule,transactions:rule.transactionIds.map(id=>data.transactions.find(t=>t.id===id)).filter((t):t is Transaction=>Boolean(t)).filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id))})).filter(group=>group.transactions.length>0);
+       const recurringGroups=data.recurringRules.map(rule=>({rule,transactions:rule.transactionIds.map(id=>data.transactions.find(t=>t.id===id)).filter((t):t is Transaction=>Boolean(t)).filter(t=>(filter==="ALL"||t.type===filter)&&(!normalizedSearch||[rule.description,t.description,t.date,t.status,labelType(t)].join(" ").toLocaleLowerCase("pt-BR").includes(normalizedSearch))).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id))})).filter(group=>group.transactions.length>0);
        const recurringIds=new Set(data.recurringRules.flatMap(rule=>rule.transactionIds));
-       const standalone=data.transactions.filter(t=>(filter==="ALL"||t.type===filter)&&!recurringIds.has(t.id)).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+       const standalone=data.transactions.filter(t=>(filter==="ALL"||t.type===filter)&&!recurringIds.has(t.id)&&(!normalizedSearch||[t.description,t.date,t.status,labelType(t)].join(" ").toLocaleLowerCase("pt-BR").includes(normalizedSearch))).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
        return <section className="panel transaction-list">
          {standalone.length===0&&recurringGroups.length===0?<Empty text="Nenhum lançamento encontrado."/>:<>
            {recurringGroups.map(({rule,transactions})=>{
