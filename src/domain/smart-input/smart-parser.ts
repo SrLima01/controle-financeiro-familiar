@@ -51,22 +51,26 @@ export function parseSmartInput(
   const raw=text.trim();
   const lower=raw.toLocaleLowerCase("pt-BR");
   const warnings:string[]=[];
-  const amountMatch=raw.match(/(?:r\$\s*)?\d+(?:[\.,]\d{1,2})?/i);
+  const amountMatch=raw.match(/(?:r\$\s*)?\d{1,3}(?:[. ]\d{3})*(?:,\d{2})?(?:\.\d{2})?|(?:r\$\s*)?\d+(?:[\.,]\d{1,2})?/i);
   const amountCents=amountMatch?parseSmartAmount(amountMatch[0]):null;
   if(amountCents===null) throw new Error("Não consegui identificar um valor. Ex.: “Paguei 150 no mercado ontem”.");
 
   let date=localDateFromOffset(0,baseDate);
-  if(/\banteontem\b/i.test(lower)) date=localDateFromOffset(-2,baseDate);
-  else if(/\bontem\b/i.test(lower)) date=localDateFromOffset(-1,baseDate);
+  let dateWasExplicit=false;
+  if(/\bhoje\b/i.test(lower)){dateWasExplicit=true;date=localDateFromOffset(0,baseDate);}
+  else if(/\banteontem\b/i.test(lower)){dateWasExplicit=true;date=localDateFromOffset(-2,baseDate);}
+  else if(/\bontem\b/i.test(lower)){dateWasExplicit=true;date=localDateFromOffset(-1,baseDate);}
   else {
     const dm=raw.match(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/);
     if(dm){
-      const year=dm[3]?Number(dm[3].length===2?`20${dm[3]}`:dm[3]):baseDate.getFullYear();
+      dateWasExplicit=true;
+      const year=dm[3]?Number(dm[3].length===2?"20"+dm[3]:dm[3]):baseDate.getFullYear();
       const candidate=new Date(year,Number(dm[2])-1,Number(dm[1]));
       if(candidate.getFullYear()!==year||candidate.getMonth()!==Number(dm[2])-1||candidate.getDate()!==Number(dm[1])) warnings.push("A data informada parece inválida.");
-      else date=`${year}-${String(Number(dm[2])).padStart(2,"0")}-${String(Number(dm[1])).padStart(2,"0")}`;
+      else date=year+"-"+String(Number(dm[2])).padStart(2,"0")+"-"+String(Number(dm[1])).padStart(2,"0");
     }
   }
+  if(!dateWasExplicit) warnings.push("Não identifiquei a data. Confirme se é hoje ou escolha outra data antes de salvar.");
 
   let type:TransactionType="EXPENSE";
   if(/\b(recebi|recebemos|entrou|salário|salario|ganhei|vendi|receita)\b/i.test(lower)) type="INCOME";
@@ -92,7 +96,7 @@ export function parseSmartInput(
   if(type==="CARD_PAYMENT") warnings.push("Pagamento de cartão exige escolha da conta de pagamento e do cartão.");
   if(!category && (type==="INCOME"||type==="EXPENSE")) warnings.push("Categoria não identificada; escolha uma antes de confirmar.");
 
-  const words=raw.replace(/(?:r\$\s*)?\d+(?:[\.,]\d{1,2})?/i,"").replace(/\b(hoje|ontem|anteontem)\b/gi,"").trim();
+  const words=raw.replace(amountMatch?.[0]??"","").replace(/\b(hoje|ontem|anteontem)\b/gi,"").trim();
   const description=words.replace(/^\s*(paguei|pague|gastei|comprei|recebi|receba|ganhei|transferi|enviei|movi|paguei)\s+/i,"").trim() || (type==="INCOME"?"Entrada identificada":"Lançamento identificado");
   const confidence=warnings.length===0?"HIGH":warnings.length<=1?"MEDIUM":"LOW";
 
