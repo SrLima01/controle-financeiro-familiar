@@ -31,7 +31,7 @@ function recurringDateFromStart(startDate:string,frequency:RecurringFrequency,oc
 
 export function validateRecurringTransactionUpdate(previous:Transaction,next:Transaction,rules:readonly RecurringRule[]):void{
   const generated=rules.some(rule=>rule.transactionIds.includes(previous.id));
-  if(generated&&next.date!==previous.date) throw new Error("A data de um lançamento gerado por recorrência não pode ser alterada. Desative a regra e crie uma nova série para mudar a agenda.");
+  if(generated&&next.type!==previous.type) throw new Error("O tipo do lançamento recorrente não pode ser alterado.");
 }
 
 export type RecurringRuleInput=Omit<RecurringRule,"id"|"transactionIds">;
@@ -108,7 +108,8 @@ export function generateRecurringTransactions(
         type:rule.type,
         status:rule.status,
         amountCents:rule.amountCents,
-        description:rule.description,\n        recurringScheduledDate:date,
+        description:rule.description,
+        recurringScheduledDate:date,
         ...(rule.categoryId?{categoryId:rule.categoryId}:{}),
         ...(rule.accountId?{accountId:rule.accountId}:{}),
         ...(rule.creditCardId?{creditCardId:rule.creditCardId}:{}),
