@@ -2,6 +2,11 @@ import type { CreditCard, Transaction } from "../types/entities";
 import { assertCents } from "../money/cents";
 import { assertFinancialDate } from "../date/financial-date";
 
+export function validateCreditCardArchive(card:CreditCard,recurringRules:readonly {active:boolean;creditCardId?:string}[]):void{
+ if(!card.active)return;
+ if(recurringRules.some(rule=>rule.active&&rule.creditCardId===card.id)) throw new Error("O cartão não pode ser arquivado enquanto houver uma recorrência ativa vinculada.");
+}
+
 export function validateCreditCard(card: CreditCard, accountIds: readonly string[]): void {
   if (!card.id || !card.name.trim()) throw new Error("Cartão inválido");
   assertCents(card.creditLimitCents, "creditLimitCents");
