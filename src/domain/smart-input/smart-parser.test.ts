@@ -33,3 +33,6 @@ describe("smart parser",()=>{
    expect(d.destinationAccountId).toBe("poupanca");
  });
 });
+
+
+it("interpreta valores com milhar no formato brasileiro", () => {\n  const draft = parseSmartInput("Paguei R$ 1.234,56 no mercado hoje", context, new Date(2026, 9, 5));\n  expect(draft.amountCents).toBe(123456);\n  expect(draft.date).toBe("2026-10-05");\n  expect(draft.warnings).not.toContain("Não identifiquei a data. Confirme se é hoje ou escolha outra data antes de salvar.");\n});\n\nit("pede confirmação quando a data não foi informada", () => {\n  const draft = parseSmartInput("Paguei R$ 45 no mercado", context, new Date(2026, 9, 5));\n  expect(draft.date).toBe("2026-10-05");\n  expect(draft.warnings).toContain("Não identifiquei a data. Confirme se é hoje ou escolha outra data antes de salvar.");\n});\n
