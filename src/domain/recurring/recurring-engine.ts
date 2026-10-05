@@ -128,6 +128,20 @@ export function generateRecurringTransactions(
   };
 }
 
+export function ensureRecurringHorizon(
+  data:EntityCollection,
+  throughDate:string
+):EntityCollection{
+  assertFinancialDate(throughDate);
+  let current=data;
+  for(const rule of data.recurringRules){
+    if(!rule.active) continue;
+    const result=generateRecurringTransactions(current,rule,throughDate);
+    if(result.generated.length) current=result.data;
+  }
+  return current;
+}
+
 export function deactivateRecurringRule(data:EntityCollection,ruleId:string):EntityCollection{
   if(!data.recurringRules.some(r=>r.id===ruleId)) throw new Error("Regra recorrente não encontrada.");
   return {...data,recurringRules:data.recurringRules.map(r=>r.id===ruleId?{...r,active:false}:r)};
