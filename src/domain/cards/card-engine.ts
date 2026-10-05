@@ -2,7 +2,7 @@ import type { CreditCard, Transaction } from "../types/entities";
 import { assertCents } from "../money/cents";
 import { assertFinancialDate } from "../date/financial-date";
 
-export function validateCreditCard(card: CreditCard, accountIds: readonly string[]): void {
+export function validateCreditCardArchive(card:CreditCard,recurringRules:readonly {active:boolean;creditCardId?:string}[]):void{\n if(!card.active)return;\n if(recurringRules.some(rule=>rule.active&&rule.creditCardId===card.id)) throw new Error("O cartão não pode ser arquivado enquanto houver uma recorrência ativa vinculada.");\n}\n\nexport function validateCreditCard(card: CreditCard, accountIds: readonly string[]): void {
   if (!card.id || !card.name.trim()) throw new Error("Cartão inválido");
   assertCents(card.creditLimitCents, "creditLimitCents");
   if (card.creditLimitCents < 0) throw new Error("Credit limit cannot be negative");
