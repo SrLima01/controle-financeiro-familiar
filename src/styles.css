@@ -185,3 +185,155 @@ html[data-theme="dark"] .bottom-nav button.nav-primary.active{background:#dbe5ff
 @media(max-width:420px){.bottom-nav button{flex-basis:54px}.bottom-nav button small{font-size:9px}}
 
 @media(max-width:520px){.topbar{height:58px;padding:0 10px}.topbar strong{font-size:14px}.topbar span{font-size:10px;max-width:105px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.topbar-actions{gap:4px}.topbar-actions .compact{padding:8px 9px}.topbar-actions .icon-button{padding:8px 5px}}
+
+
+/* Refinamento visual — Contas e Cartões: hierarquia, toque e leitura mobile */
+.account-list .account-row{
+  padding:16px 0;
+  gap:14px;
+}
+.account-list .account-row>div:first-child{
+  min-width:0;
+  flex:1;
+}
+.account-list .account-row>div:first-child strong{
+  font-size:15px;
+  line-height:1.25;
+}
+.account-list .account-row>div:first-child span{
+  line-height:1.35;
+}
+.account-list .account-row>.row-actions{
+  flex:0 0 auto;
+}
+.account-list .account-row>.row-actions>strong{
+  font-size:17px;
+  color:#172033;
+  white-space:nowrap;
+}
+.account-list .row-actions .link-button{
+  min-height:40px;
+  padding:8px 10px;
+  border-radius:9px;
+}
+.account-list .row-actions .link-button:hover{
+  background:#f3f5f9;
+}
+.account-list .row-actions .link-button.danger:hover{
+  background:#fff0f0;
+}
+.archived-section .account-row{
+  opacity:.86;
+}
+.archived-section .account-row .secondary.compact{
+  min-height:40px;
+}
+
+.card-item{
+  position:relative;
+  overflow:hidden;
+}
+.card-item::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:4px;
+  background:#415a9b;
+}
+.card-item-head{
+  padding-left:4px;
+}
+.card-item-head>div strong{
+  font-size:17px;
+}
+.card-item-head>strong{
+  font-size:18px;
+  white-space:nowrap;
+}
+.card-metrics{
+  margin-top:18px;
+}
+.card-metrics div{
+  min-width:0;
+}
+.card-metrics strong{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.card-actions{
+  align-items:center;
+}
+.card-actions button{
+  min-height:40px;
+}
+.card-actions .link-button{
+  padding:8px 10px;
+  border-radius:9px;
+}
+.card-actions .link-button:hover{
+  background:#f3f5f9;
+}
+.card-actions .link-button.danger:hover{
+  background:#fff0f0;
+}
+@media(max-width:620px){
+  .account-list .account-row{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .account-list .account-row>.row-actions{
+    width:100%;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto auto;
+    justify-content:stretch;
+  }
+  .account-list .account-row>.row-actions>strong{
+    grid-column:1/-1;
+    text-align:left;
+    font-size:19px;
+    padding-bottom:2px;
+  }
+  .account-list .row-actions .link-button,
+  .account-list .row-actions .secondary.compact{
+    width:100%;
+    min-height:42px;
+  }
+  .card-item-head{
+    align-items:flex-start;
+  }
+  .card-item-head>strong{
+    font-size:16px;
+  }
+  .card-actions{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+  .card-actions .link-button{
+    min-height:42px;
+    background:#f5f7fb;
+  }
+  .card-actions .link-button.danger{
+    background:#fff5f5;
+  }
+  html[data-theme="dark"] .card-actions .link-button{
+    background:#273142;
+  }
+  html[data-theme="dark"] .card-actions .link-button.danger{
+    background:#3a2529;
+  }
+}
+html[data-theme="dark"] .account-list .account-row>.row-actions>strong{
+  color:#e7ebf3;
+}
+html[data-theme="dark"] .account-list .row-actions .link-button:hover,
+html[data-theme="dark"] .card-actions .link-button:hover{
+  background:#273142;
+}
+html[data-theme="dark"] .account-list .row-actions .link-button.danger:hover,
+html[data-theme="dark"] .card-actions .link-button.danger:hover{
+  background:#3a2529;
+}
