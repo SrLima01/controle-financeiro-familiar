@@ -183,3 +183,5 @@ html[data-theme="dark"] .bottom-nav{background:#111722;border-color:#2b3444;box-
 html[data-theme="dark"] .bottom-nav button.nav-primary{border-color:#111722;background:#e8edf7;color:#172033;box-shadow:0 7px 20px rgba(0,0,0,.35)}
 html[data-theme="dark"] .bottom-nav button.nav-primary.active{background:#dbe5ff;color:#172033}
 @media(max-width:420px){.bottom-nav button{flex-basis:54px}.bottom-nav button small{font-size:9px}}
+
+@media(max-width:520px){.topbar{height:58px;padding:0 10px}.topbar strong{font-size:14px}.topbar span{font-size:10px;max-width:105px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.topbar-actions{gap:4px}.topbar-actions .compact{padding:8px 9px}.topbar-actions .icon-button{padding:8px 5px}}
