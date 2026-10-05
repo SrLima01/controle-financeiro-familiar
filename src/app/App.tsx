@@ -514,7 +514,7 @@ function Reports({data}:{data:EntityCollection}) {
  </div>;
 }
 
-function Settings({data,family,onChange,onSignOut}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>}) {
+function Settings({data,family,onChange,onSignOut,theme,onThemeChange}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;theme:"light"|"dark";onThemeChange:(theme:"light"|"dark")=>void}) {
  const [error,setError]=useState(""); const [busy,setBusy]=useState(false);
  async function importFile(file:File){
   setError("");setBusy(true);
@@ -529,6 +529,7 @@ function Settings({data,family,onChange,onSignOut}:{data:EntityCollection;family
  {error&&<div className="global-alert">{error}</div>}
  <section className="panel"><h2>Família</h2><p>Compartilhe este código com outro membro para que ele possa entrar nesta família.</p><div className="family-invite-code"><strong>{family.invite_code}</strong><button className="secondary compact" onClick={async()=>{try{if(!navigator.clipboard)throw new Error("clipboard_unavailable");await navigator.clipboard.writeText(family.invite_code);alert("Código de convite copiado.");}catch{setError(`Não foi possível copiar automaticamente. Código: ${family.invite_code}`);}}}>Copiar código</button></div></section>
  <section className="panel settings-list">
+   <div><strong>Tema da interface</strong><p>Escolha entre o modo claro e o modo escuro. A preferência fica salva neste aparelho.</p><div className="theme-choice" role="group" aria-label="Tema da interface"><button className={theme==="light"?"active":""} onClick={()=>onThemeChange("light")} aria-pressed={theme==="light"}>☀️ Claro</button><button className={theme==="dark"?"active":""} onClick={()=>onThemeChange("dark")} aria-pressed={theme==="dark"}>🌙 Escuro</button></div></div>
   <div><strong>Backup completo</strong><p>Exporta todas as entidades financeiras em JSON.</p><button className="primary compact" onClick={()=>exportJson(data)}>Exportar JSON</button></div>
   <div><strong>Exportar lançamentos</strong><p>Gera CSV para Excel ou LibreOffice.</p><button className="secondary compact" onClick={()=>exportTransactionsCsv(data)}>Exportar CSV</button></div>
   <div><strong>Importar backup</strong><p>O arquivo é validado antes de substituir os dados locais.</p><input type="file" accept="application/json,.json" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.currentTarget.value=""}}/></div>
@@ -745,9 +746,9 @@ function People({data,onChange}:{data:EntityCollection;onChange:(next:EntityColl
  </div>;
 }
 
-function More({data,family,onChange,onSignOut,defaultSection="smart"}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;defaultSection?:"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"categories"|"settings"}) {
+function More({data,family,onChange,onSignOut,defaultSection="smart",theme,onThemeChange}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;defaultSection?:"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"categories"|"settings";theme:"light"|"dark";onThemeChange:(theme:"light"|"dark")=>void}) {
  const [section,setSection]=useState<"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"categories"|"settings">(defaultSection);
- return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="receipt"?"active":""} onClick={()=>setSection("receipt")}>Ler recibo</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="people"?"active":""} onClick={()=>setSection("people")}>Pessoas</button><button className={section==="categories"?"active":""} onClick={()=>setSection("categories")}>Categorias</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:section==="people"?<People data={data} onChange={onChange}/>:section==="categories"?<Categories data={data} onChange={onChange}/>:<Settings data={data} family={family} onChange={onChange} onSignOut={onSignOut}/>}</>;
+ return <>{<div className="subnav"><button className={section==="smart"?"active":""} onClick={()=>setSection("smart")}>Entrada inteligente</button><button className={section==="receipt"?"active":""} onClick={()=>setSection("receipt")}>Ler recibo</button><button className={section==="pots"?"active":""} onClick={()=>setSection("pots")}>Caixinhas</button><button className={section==="recurring"?"active":""} onClick={()=>setSection("recurring")}>Recorrências</button><button className={section==="budgets"?"active":""} onClick={()=>setSection("budgets")}>Orçamentos</button><button className={section==="assistant"?"active":""} onClick={()=>setSection("assistant")}>Assistente</button><button className={section==="people"?"active":""} onClick={()=>setSection("people")}>Pessoas</button><button className={section==="categories"?"active":""} onClick={()=>setSection("categories")}>Categorias</button><button className={section==="settings"?"active":""} onClick={()=>setSection("settings")}>Configurações</button></div>}{section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:section==="people"?<People data={data} onChange={onChange}/>:section==="categories"?<Categories data={data} onChange={onChange}/>:<Settings data={data} family={family} onChange={onChange} onSignOut={onSignOut} theme={theme} onThemeChange={onThemeChange}/>}</>;
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
@@ -815,6 +816,9 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   const [page,setPage]=useState<Page>("dashboard");
   const [hideValues,setHideValues]=useState(()=>localStorage.getItem("finance-hide-values")==="1");
   function toggleHideValues(){setHideValues(current=>{const next=!current;localStorage.setItem("finance-hide-values",next?"1":"0");return next;});}
+  const [theme,setTheme]=useState<"light"|"dark">(()=>localStorage.getItem("finance-theme")==="dark"?"dark":"light");
+  useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem("finance-theme",theme);},[theme]);
+  function changeTheme(next:"light"|"dark"){setTheme(next);}
   const [quickMode,setQuickMode]=useState<"smart"|"receipt">("smart");
   function openQuickAction(mode:"smart"|"receipt"|"manual"){
     if(mode==="manual"){setPage("transacoes");return}
@@ -924,7 +928,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
-    page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode}/> : page==="relatorios" ? <Reports data={data}/> :
+    page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} theme={theme} onThemeChange={changeTheme}/> : page==="relatorios" ? <Reports data={data}/> :
     <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues}/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar família</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
