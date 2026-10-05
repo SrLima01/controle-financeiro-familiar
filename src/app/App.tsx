@@ -404,6 +404,16 @@ function Recurring({data,onChange,embedded=false,onCreated,onCancel}:{data:Entit
      setBusy(true);await onChange(generated.data);reset();onCreated?.();
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a recorrência.");}finally{setBusy(false)}
  }
+ async function toggleOccurrence(rule:RecurringRule, tx:Transaction){
+   setBusy(true);setError("");
+   try{
+     const paidStatus:Transaction["status"]=rule.type==="INCOME"?"RECEIVED":"PAID";
+     const nextStatus=tx.status===paidStatus?"PENDING":paidStatus;
+     const nextTx={...tx,status:nextStatus};
+     validateTransaction(nextTx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions.filter(t=>t.id!==tx.id)});
+     await onChange({...data,transactions:data.transactions.map(t=>t.id===tx.id?nextTx:t)});
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível atualizar a recorrência.")}finally{setBusy(false)}
+ }
  async function generate(rule:RecurringRule){
    setBusy(true);setError("");
    try{const horizon=new Date();horizon.setMonth(horizon.getMonth()+12);const through=`${horizon.getFullYear()}-${String(horizon.getMonth()+1).padStart(2,"0")}-${String(horizon.getDate()).padStart(2,"0")}`;const result=generateRecurringTransactions(data,rule,through);await onChange(result.data)}catch(e){setError(e instanceof Error?e.message:"Não foi possível gerar os lançamentos.");}finally{setBusy(false)}
@@ -416,7 +426,7 @@ function Recurring({data,onChange,embedded=false,onCreated,onCancel}:{data:Entit
  const frequencyLabel=(f:RecurringFrequency)=>({WEEKLY:"Semanal",BIWEEKLY:"Quinzenal",MONTHLY:"Mensal",BIMONTHLY:"Bimestral",QUARTERLY:"Trimestral",SEMIANNUAL:"Semestral",ANNUAL:"Anual"}[f]);
  return <div className="page-content">
    {!embedded&&<><div className="page-heading"><div><span className="eyebrow">Automação</span><h1>Recorrências</h1></div><button className="primary compact" onClick={reset}>+ Nova recorrência</button></div>
-   <section className="panel transaction-list">{data.recurringRules.filter(r=>r.active).length===0?<Empty text="Nenhuma recorrência ativa."/>:data.recurringRules.filter(r=>r.active).map(r=><div className="transaction-row" key={r.id}><div><strong>{r.description}</strong><span>{frequencyLabel(r.frequency)} · desde {r.startDate} · {money(r.amountCents)} · {r.transactionIds.length} lançamentos gerados</span></div><div className="row-actions"><button className="link-button" onClick={()=>edit(r)}>Editar regra</button><button className="link-button" disabled={busy} onClick={()=>void generate(r)}>Gerar próximos</button><button className="link-button danger" disabled={busy} onClick={()=>void deactivate(r)}>Desativar</button></div></div>)}</section></>}
+   <section className="panel transaction-list">{data.recurringRules.filter(r=>r.active).length===0?<Empty text="Nenhuma recorrência ativa."/>:data.recurringRules.filter(r=>r.active).map(r=>{ const occurrences=r.transactionIds.map(id=>data.transactions.find(t=>t.id===id)).filter((t):t is Transaction=>Boolean(t)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6); const paidStatus=r.type==="INCOME"?"RECEIVED":"PAID"; return <div className="transaction-row" key={r.id}><div><strong>{r.description}</strong><span>{frequencyLabel(r.frequency)} · desde {r.startDate} · {money(r.amountCents)} · {r.transactionIds.length} lançamentos gerados</span>{occurrences.length>0&&<div className="recurring-occurrences"><strong>{r.type==="INCOME"?"Recebimentos":"Pagamentos"} recentes</strong>{occurrences.map(tx=><label className="recurring-occurrence" key={tx.id}><input type="checkbox" checked={tx.status===paidStatus} disabled={busy||tx.status==="CANCELLED"} onChange={()=>void toggleOccurrence(r,tx)}/><span>{tx.date} · {money(tx.amountCents)}</span>{tx.status==="CANCELLED"&&<em>cancelado</em>}</label>)}</div>}</div><div className="row-actions"><button className="link-button" onClick={()=>edit(r)}>Editar regra</button><button className="link-button" disabled={busy} onClick={()=>void generate(r)}>Gerar próximos</button><button className="link-button danger" disabled={busy} onClick={()=>void deactivate(r)}>Desativar</button></div></div>})}</section></>}
    {error&&<div className="global-alert">{error}</div>}
    <section className="panel form-panel"><h2>{editing?"Editar recorrência":embedded?"Lançamento recorrente":"Nova recorrência"}</h2><div className="form-grid">
     <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as "INCOME"|"EXPENSE";setType(v);setCategoryId("");if(v==="INCOME")setCreditCardId("")}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option></select></label>
