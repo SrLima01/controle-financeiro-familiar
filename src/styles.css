@@ -122,3 +122,9 @@ html[data-theme="dark"] .alert.error,
 html[data-theme="dark"] .global-alert{background:#3a2024;color:#ffb4b4}
 html[data-theme="dark"] .sync-dot{background:#1c2a20;border-color:#36533d}
 html[data-theme="dark"] .hero-card{background:#0b0f16}
+
+.recurring-occurrences{display:flex;flex-direction:column;gap:6px;margin-top:10px;padding:10px 0 2px;border-top:1px solid var(--border,#e2e8f0)}
+.recurring-occurrences>strong{font-size:.78rem;color:var(--muted,#64748b);margin-bottom:2px}
+.recurring-occurrence{display:flex;align-items:center;gap:8px;font-size:.85rem;cursor:pointer}
+.recurring-occurrence input{width:16px;height:16px;accent-color:var(--primary,#2563eb)}
+.recurring-occurrence em{font-size:.75rem;color:var(--muted,#64748b)}
