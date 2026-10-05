@@ -580,7 +580,7 @@ function SmartInput({data,onChange}:{data:EntityCollection;onChange:(next:Entity
    try{ setDraft(parseSmartInput(text,{categories:data.categories,accounts:data.accounts,cards:data.cards})); }
    catch(e){setDraft(null);setError(e instanceof Error?e.message:"Não foi possível interpretar.");}
  }
- function update<K extends keyof SmartDraft>(key:K,value:SmartDraft[K]){setDraft(d=>d?{...d,[key]:value}:d)}
+ function update<K extends keyof SmartDraft>(key:K,value:SmartDraft[K]){setDraft(d=>{if(!d)return d;const next={...d,[key]:value};if(key==="date"){next.warnings=d.warnings.filter(w=>w!=="Não identifiquei a data. Confirme se é hoje ou escolha outra data antes de salvar.");}return next;})}
  async function confirm(){
    if(!draft)return;
    setError("");

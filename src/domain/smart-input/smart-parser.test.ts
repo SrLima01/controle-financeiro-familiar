@@ -33,3 +33,17 @@ describe("smart parser",()=>{
    expect(d.destinationAccountId).toBe("poupanca");
  });
 });
+
+
+it("interpreta valores com milhar no formato brasileiro", () => {
+  const draft = parseSmartInput("Paguei R$ 1.234,56 no mercado hoje", {categories,accounts,cards}, new Date(2026, 9, 5));
+  expect(draft.amountCents).toBe(123456);
+  expect(draft.date).toBe("2026-10-05");
+  expect(draft.warnings).not.toContain("Não identifiquei a data. Confirme se é hoje ou escolha outra data antes de salvar.");
+});
+
+it("pede confirmação quando a data não foi informada", () => {
+  const draft = parseSmartInput("Paguei R$ 45 no mercado", {categories,accounts,cards}, new Date(2026, 9, 5));
+  expect(draft.date).toBe("2026-10-05");
+  expect(draft.warnings).toContain("Não identifiquei a data. Confirme se é hoje ou escolha outra data antes de salvar.");
+});
