@@ -356,7 +356,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
              const shiftedDate=dayDelta===0?item.date:new Date(new Date(item.date+"T12:00:00").getTime()+dayDelta*86400000).toISOString().slice(0,10);
              return {...item,date:tx.date!==editing.date?shiftedDate:item.date,recurringScheduledDate:tx.date!==editing.date?(new Date(new Date(scheduled+"T12:00:00").getTime()+dayDelta*86400000).toISOString().slice(0,10)):item.recurringScheduledDate,amountCents:tx.amountCents!==editing.amountCents?tx.amountCents:item.amountCents,status:tx.status!==editing.status?tx.status:item.status,description:tx.description!==editing.description?tx.description:item.description,categoryId:tx.categoryId!==editing.categoryId?tx.categoryId:item.categoryId,accountId:tx.accountId!==editing.accountId?tx.accountId:item.accountId,creditCardId:tx.creditCardId!==editing.creditCardId?tx.creditCardId:item.creditCardId,personId:tx.personId!==editing.personId?tx.personId:item.personId};
            });
-           nextRules=data.recurringRules.map(r=>r.id===rule.id?{...r,startDate:rule.startDate===originalScheduled?tx.date:rule.startDate,amountCents:tx.amountCents,status:tx.status,description:tx.description,categoryId:tx.categoryId,accountId:tx.accountId,creditCardId:tx.creditCardId,personId:tx.personId}:r);
+           nextRules=data.recurringRules.map(r=>r.id===rule.id?{...r,startDate:rule.startDate===originalScheduled?tx.date:rule.startDate,amountCents:tx.amountCents,status:(tx.status==="RECEIVED"||tx.status==="PAID"||tx.status==="PENDING"||tx.status==="PLANNED")?tx.status:rule.status,description:tx.description,categoryId:tx.categoryId,accountId:tx.accountId,creditCardId:tx.creditCardId,personId:tx.personId}:r);
          }
        }
      }
@@ -392,7 +392,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
          {standalone.length===0&&recurringGroups.length===0?<Empty text="Nenhum lançamento encontrado."/>:<>
            {recurringGroups.map(({rule,transactions})=>{
              const expanded=expandedRecurringRuleId===rule.id;
-             const shown=expanded&&(showAllRecurring?transactions:transactions.slice(0,12));
+             const shown=expanded?(showAllRecurring?transactions:transactions.slice(0,12)):[];
              const paidCount=transactions.filter(t=>t.status==="PAID"||t.status==="RECEIVED").length;
              const freq=({WEEKLY:"Semanal",BIWEEKLY:"Quinzenal",MONTHLY:"Mensal",BIMONTHLY:"Bimestral",QUARTERLY:"Trimestral",SEMIANNUAL:"Semestral",ANNUAL:"Anual"} as Record<RecurringFrequency,string>)[rule.frequency];
              return <article className={expanded?"transaction-group transaction-group-open":"transaction-group"} key={rule.id}>
