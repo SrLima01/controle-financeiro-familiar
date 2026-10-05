@@ -1,89 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { applyRecurringRuleToFutureTransactions, createRecurringRule, ensureRecurringHorizon, generateRecurringTransactions, nextRecurringDate, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "./recurring-engine";
+import { applyRecurringOccurrenceEdit, applyRecurringRuleToFutureTransactions, createRecurringRule, ensureRecurringHorizon, generateRecurringTransactions, nextRecurringDate, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "./recurring-engine";
 import type { EntityCollection } from "../../infrastructure/persistence/repository";
-
 const accounts=[{id:"a",name:"Conta",type:"CHECKING" as const,openingBalanceCents:0,active:true}];
 const base={description:"Aluguel",frequency:"MONTHLY" as const,startDate:"2026-01-31",amountCents:100000,type:"EXPENSE" as const,status:"PLANNED" as const,accountId:"a",active:true};
-
+const empty=(rule:ReturnType<typeof createRecurringRule>):EntityCollection=>({people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]});
 describe("recurring engine",()=>{
- it("rejects a zero-value recurring rule",()=>{
-   expect(()=>createRecurringRule({...base,amountCents:0})).toThrow("maior que zero");
- });
- it("advances dates according to frequency",()=>{
-   expect(nextRecurringDate("2026-01-31","MONTHLY")).toBe("2026-02-28");
-   expect(nextRecurringDate("2026-01-05","BIWEEKLY")).toBe("2026-01-19");
- });
- it("preserves the original day anchor across short months",()=>{
-   const rule=createRecurringRule(base);
-   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
-   const result=generateRecurringTransactions(data,rule,"2026-05-31");
-   expect(result.generated.map(t=>t.date)).toEqual([
-     "2026-01-31","2026-02-28","2026-03-31","2026-04-30","2026-05-31"
-   ]);
- });
- it("creates a rule and generates only missing occurrences",()=>{
-   const rule=createRecurringRule(base);
-   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
-   const first=generateRecurringTransactions(data,rule,"2026-03-31");
-   expect(first.generated).toHaveLength(3);
-   const second=generateRecurringTransactions(first.data,first.data.recurringRules[0],"2026-05-31");
-   expect(second.generated).toHaveLength(2);
-   expect(second.data.transactions).toHaveLength(5);
- });
- it("rejects changing the date of a generated occurrence",()=>{
-   const rule=createRecurringRule(base);
-   const data: EntityCollection = {people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
-   const generated=generateRecurringTransactions(data,rule,"2026-03-31");
-   const tx=generated.generated[0];
-   expect(()=>validateRecurringTransactionUpdate(tx,{...tx,date:"2026-02-01"},generated.data.recurringRules)).toThrow();
-   expect(()=>validateRecurringTransactionUpdate(tx,{...tx,description:"Aluguel ajustado"},generated.data.recurringRules)).not.toThrow();
- });
- it("does not generate beyond end date",()=>{
-   const rule=createRecurringRule({...base,endDate:"2026-02-28"});
-   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
-   expect(generateRecurringTransactions(data,rule,"2026-12-31").generated).toHaveLength(2);
- });
- it("allows editing a generated rule while preserving its transaction history",()=>{
-   const rule=createRecurringRule(base);
-   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
-   const generated=generateRecurringTransactions(data,rule,"2026-03-31");
-   const stored=generated.data.recurringRules[0];
-   expect(()=>validateRecurringRuleUpdate(stored,{...stored,amountCents:200000})).not.toThrow();
-   expect(stored.transactionIds).toHaveLength(3);
- });
- it("propagates recurring rule edits to future generated transactions only",()=>{
-   const rule=createRecurringRule(base);
-   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
-   const generated=generateRecurringTransactions(data,rule,"2026-03-31");
-   const stored=generated.data.recurringRules[0];
-   const updated={...stored,amountCents:200000,description:"Salário ajustado",status:"RECEIVED" as const};
-   const next=applyRecurringRuleToFutureTransactions(generated.data,stored,updated,"2026-02-01");
-   expect(next.transactions.map(t=>({date:t.date,amount:t.amountCents,status:t.status,description:t.description}))).toEqual([
-     {date:"2026-01-31",amount:100000,status:"PLANNED",description:"Aluguel"},
-     {date:"2026-02-28",amount:200000,status:"RECEIVED",description:"Salário ajustado"},
-     {date:"2026-03-31",amount:200000,status:"RECEIVED",description:"Salário ajustado"},
-   ]);
- });
- it("maintains the recurring horizon without duplicating existing occurrences",()=>{
-   const rule=createRecurringRule(base);
-   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
-   const first=generateRecurringTransactions(data,rule,"2026-03-31");
-   const maintained=ensureRecurringHorizon(first.data,"2026-06-30");
-   expect(maintained.transactions.map(t=>t.date)).toEqual([
-     "2026-01-31","2026-02-28","2026-03-31","2026-04-30","2026-05-31","2026-06-30"
-   ]);
-   const again=ensureRecurringHorizon(maintained,"2026-06-30");
-   expect(again.transactions).toHaveLength(6);
-   expect(again.recurringRules[0].transactionIds).toHaveLength(6);
- });
- it("does not maintain inactive recurring rules",()=>{
-   const rule=createRecurringRule({...base,active:false});
-   const data:EntityCollection={people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]};
-   expect(ensureRecurringHorizon(data,"2026-06-30")).toBe(data);
- });
-
- it("allows editing a rule before its first generation",()=>{
-   const rule=createRecurringRule(base);
-   expect(()=>validateRecurringRuleUpdate(rule,{...rule,amountCents:200000})).not.toThrow();
- });
+ it("rejects a zero-value recurring rule",()=>{expect(()=>createRecurringRule({...base,amountCents:0})).toThrow("maior que zero");});
+ it("advances dates according to frequency",()=>{expect(nextRecurringDate("2026-01-31","MONTHLY")).toBe("2026-02-28");expect(nextRecurringDate("2026-01-05","BIWEEKLY")).toBe("2026-01-19");});
+ it("preserves the original day anchor across short months",()=>{const rule=createRecurringRule(base);const result=generateRecurringTransactions(empty(rule),rule,"2026-05-31");expect(result.generated.map(t=>t.date)).toEqual(["2026-01-31","2026-02-28","2026-03-31","2026-04-30","2026-05-31"]);expect(result.generated.every(t=>t.scheduledDate===t.date)).toBe(true);});
+ it("creates only missing scheduled occurrences",()=>{const rule=createRecurringRule(base);const first=generateRecurringTransactions(empty(rule),rule,"2026-03-31");const second=generateRecurringTransactions(first.data,first.data.recurringRules[0],"2026-05-31");expect(second.generated).toHaveLength(2);expect(second.data.transactions).toHaveLength(5);});
+ it("allows a generated occurrence to move its effective date while keeping its schedule",()=>{const rule=createRecurringRule(base);const generated=generateRecurringTransactions(empty(rule),rule,"2026-03-31");const tx=generated.generated[1];const edited=applyRecurringOccurrenceEdit(generated.data,tx,{...tx,date:"2026-03-02",description:"Aluguel pago atrasado"},"ONLY_THIS");const stored=edited.transactions.find(t=>t.id===tx.id)!;expect(stored.date).toBe("2026-03-02");expect(stored.scheduledDate).toBe("2026-02-28");expect(stored.recurringOverride).toBe(true);const horizon=ensureRecurringHorizon(edited,"2026-05-31");expect(horizon.transactions.filter(t=>t.scheduledDate==="2026-02-28")).toHaveLength(1);expect(horizon.transactions.map(t=>t.date)).toContain("2026-03-02");});
+ it("propagates this-and-following without overwriting the selected occurrence override",()=>{const rule=createRecurringRule(base);const generated=generateRecurringTransactions(empty(rule),rule,"2026-03-31");const tx=generated.generated[1];const edited=applyRecurringOccurrenceEdit(generated.data,tx,{...tx,date:"2026-03-05",amountCents:120000,description:"Aluguel ajustado"},"THIS_AND_FOLLOWING");const feb=edited.transactions.find(t=>t.id===tx.id)!;expect(feb.date).toBe("2026-03-05");expect(feb.amountCents).toBe(120000);expect(feb.recurringOverride).toBe(true);const march=edited.transactions.find(t=>t.scheduledDate==="2026-03-31")!;expect(march.amountCents).toBe(120000);expect(march.description).toBe("Aluguel ajustado");const horizon=ensureRecurringHorizon(edited,"2026-05-31");expect(horizon.transactions.filter(t=>t.scheduledDate==="2026-02-28")).toHaveLength(1);expect(horizon.transactions.filter(t=>t.scheduledDate==="2026-04-30")).toHaveLength(1);});
+ it("does not generate beyond end date",()=>{const rule=createRecurringRule({...base,endDate:"2026-02-28"});expect(generateRecurringTransactions(empty(rule),rule,"2026-12-31").generated).toHaveLength(2);});
+ it("allows editing a generated rule while preserving its transaction history",()=>{const rule=createRecurringRule(base);const generated=generateRecurringTransactions(empty(rule),rule,"2026-03-31");const stored=generated.data.recurringRules[0];expect(()=>validateRecurringRuleUpdate(stored,{...stored,amountCents:200000})).not.toThrow();expect(stored.transactionIds).toHaveLength(3);});
+ it("propagates recurring rule edits only to future non-overridden occurrences",()=>{const rule=createRecurringRule(base);const generated=generateRecurringTransactions(empty(rule),rule,"2026-03-31");const stored=generated.data.recurringRules[0];const overridden=applyRecurringOccurrenceEdit(generated.data,generated.generated[1],{...generated.generated[1],amountCents:150000},"ONLY_THIS");const next=applyRecurringRuleToFutureTransactions(overridden,stored,{...stored,amountCents:200000,description:"Regra nova",status:"RECEIVED"},"2026-02-01");expect(next.transactions.find(t=>t.id===generated.generated[1].id)?.amountCents).toBe(150000);expect(next.transactions.find(t=>t.id===generated.generated[2].id)?.amountCents).toBe(200000);});
+ it("maintains the recurring horizon without duplicates after a date adjustment",()=>{const rule=createRecurringRule(base);const first=generateRecurringTransactions(empty(rule),rule,"2026-03-31");const adjusted=applyRecurringOccurrenceEdit(first.data,first.generated[0],{...first.generated[0],date:"2026-02-02"},"ONLY_THIS");const maintained=ensureRecurringHorizon(adjusted,"2026-06-30");expect(maintained.transactions).toHaveLength(6);expect(maintained.transactions.filter(t=>t.scheduledDate==="2026-01-31")).toHaveLength(1);});
+ it("does not maintain inactive recurring rules",()=>{const rule=createRecurringRule({...base,active:false});const data=empty(rule);expect(ensureRecurringHorizon(data,"2026-06-30")).toBe(data);});
+ it("allows editing a rule before its first generation",()=>{const rule=createRecurringRule(base);expect(()=>validateRecurringRuleUpdate(rule,{...rule,amountCents:200000})).not.toThrow();});
+ it("rejects changing the scheduled date directly",()=>{const rule=createRecurringRule(base);const generated=generateRecurringTransactions(empty(rule),rule,"2026-03-31");const tx=generated.generated[0];expect(()=>validateRecurringTransactionUpdate(tx,{...tx,scheduledDate:"2026-02-01"},generated.data.recurringRules)).toThrow();});
 });
