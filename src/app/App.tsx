@@ -195,16 +195,10 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
     if(!confirm("Arquivar a conta \"" + a.name + "\"? O histórico será preservado."))return;
     setBusy(true);setError("");try{await onChange({...data,accounts:data.accounts.map(x=>x.id===a.id?{...x,active:false}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");}finally{setBusy(false);}
   }
-  return <div className="page-content">
-    <div className="page-heading"><div><span className="eyebrow">Patrimônio</span><h1>Contas</h1></div><button className="primary compact" onClick={reset}>+ Nova conta</button></div>
+  return <div className="page-content">\n    <div className="page-heading"><div><span className="eyebrow">Patrimônio</span><h1>Contas</h1></div><button className="primary compact" onClick={reset}>+ Nova conta</button></div>
     {error&&<div className="global-alert">{error}</div>}
     <section className="panel account-list">{data.accounts.filter(a=>a.active).length===0?<Empty text="Nenhuma conta ativa. Cadastre a primeira conta para começar."/>:data.accounts.filter(a=>a.active).map(a=><div className="account-row" key={a.id}><div><strong>{a.name}</strong><span>{a.type} · Saldo inicial {money(a.openingBalanceCents)}</span></div><div className="row-actions"><strong>{money(calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}))}</strong><button className="link-button" onClick={()=>edit(a)}>Editar</button><button className="link-button danger" onClick={()=>void archive(a)} disabled={busy}>Arquivar</button></div></div>)}</section>
-    <section className="panel form-panel"><h2>{editing?"Editar conta":"Nova conta"}</h2>
-      <div className="form-grid"><label>Nome<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Banco principal"/></label>
-      <label>Tipo<select value={type} onChange={e=>setType(e.target.value as AccountType)}><option value="CHECKING">Conta corrente</option><option value="SAVINGS">Poupança</option><option value="DIGITAL">Conta digital</option><option value="CASH">Dinheiro</option><option value="INVESTMENT">Investimento</option></select></label>
-      <label>Saldo inicial<input inputMode="decimal" value={opening} onChange={e=>setOpening(e.target.value)} placeholder="0,00"/></label></div>
-      <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Criar conta"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div>
-    </section>
+    {data.accounts.some(a=>!a.active)&&<section className="panel archived-section"><div className="section-title"><div><h2>Contas arquivadas</h2><span>Histórico preservado; não entram em novos lançamentos.</span></div></div><div className="account-list">{data.accounts.filter(a=>!a.active).map(a=><div className="account-row" key={a.id}><div><strong>{a.name}</strong><span>{a.type} · arquivada</span></div><div className="row-actions"><strong>{money(calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}))}</strong><button className="secondary compact" onClick={()=>void restore(a)} disabled={busy}>Reativar</button></div></div>)}</div></section>
   </div>;
 }
 
