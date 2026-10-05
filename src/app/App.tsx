@@ -522,7 +522,7 @@ function Reports({data}:{data:EntityCollection}) {
 }
 
 function Settings({data,family,onChange,onSignOut,theme,onThemeChange}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;theme:"light"|"dark";onThemeChange:(theme:"light"|"dark")=>void}) {
- const [error,setError]=useState(""); const [busy,setBusy]=useState(false);
+ const [error,setError]=useState(""); const [busy,setBusy]=useState(false); const [resetOpen,setResetOpen]=useState(false); const [resetPhrase,setResetPhrase]=useState("");
  async function importFile(file:File){
   setError("");setBusy(true);
   try{
@@ -532,12 +532,26 @@ function Settings({data,family,onChange,onSignOut,theme,onThemeChange}:{data:Ent
   }catch(e){setError(e instanceof Error?e.message:"Backup inválido.");}
   finally{setBusy(false);}
  }
+ async function resetFinancialData(){
+  if(resetPhrase!=="ZERAR DADOS"){setError("Digite exatamente ZERAR DADOS para confirmar.");return;}
+  if(!confirm("Isto apagará contas, cartões, lançamentos, parcelas, recorrências, caixinhas, orçamentos e pessoas desta família. As categorias serão preservadas. A conta/login e a família serão mantidos. Deseja realmente continuar?"))return;
+  setError("");setBusy(true);
+  try{
+   const next:EntityCollection={...data,people:[],accounts:[],cards:[],transactions:[],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[]};
+   await onChange(next);
+   setResetPhrase("");setResetOpen(false);
+   alert("Dados financeiros zerados com segurança. A estrutura da família e as categorias foram preservadas.");
+  }catch(e){setError(e instanceof Error?e.message:"Não foi possível zerar os dados financeiros.");}
+  finally{setBusy(false);}
+ }
+
  return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Aplicativo</span><h1>Configurações</h1></div></div>
  {error&&<div className="global-alert">{error}</div>}
  <section className="panel"><h2>Família</h2><p>Compartilhe este código com outro membro para que ele possa entrar nesta família.</p><div className="family-invite-code"><strong>{family.invite_code}</strong><button className="secondary compact" onClick={async()=>{try{if(!navigator.clipboard)throw new Error("clipboard_unavailable");await navigator.clipboard.writeText(family.invite_code);alert("Código de convite copiado.");}catch{setError(`Não foi possível copiar automaticamente. Código: ${family.invite_code}`);}}}>Copiar código</button></div></section>
  <section className="panel settings-list">
    <div><strong>Tema da interface</strong><p>Escolha entre o modo claro e o modo escuro. A preferência fica salva neste aparelho.</p><div className="theme-choice" role="group" aria-label="Tema da interface"><button className={theme==="light"?"active":""} onClick={()=>onThemeChange("light")} aria-pressed={theme==="light"}>☀️ Claro</button><button className={theme==="dark"?"active":""} onClick={()=>onThemeChange("dark")} aria-pressed={theme==="dark"}>🌙 Escuro</button></div></div>
   <div><strong>Backup completo</strong><p>Exporta todas as entidades financeiras em JSON.</p><button className="primary compact" onClick={()=>exportJson(data)}>Exportar JSON</button></div>
+  <div className="danger-zone"><strong>Zerar dados financeiros</strong><p>Remove os dados de teste desta família, mas preserva categorias, família, login e estrutura do aplicativo. Faça um backup antes se quiser manter uma cópia.</p><button className="secondary compact danger-button" onClick={()=>{setResetOpen(true);setResetPhrase("");setError("")}} disabled={busy}>Abrir reset seguro</button>{resetOpen&&<div className="reset-confirm"><strong>Confirmação obrigatória</strong><p>Digite <b>ZERAR DADOS</b> para habilitar a exclusão.</p><input value={resetPhrase} onChange={e=>setResetPhrase(e.target.value.toUpperCase())} placeholder="ZERAR DADOS" autoCapitalize="characters"/><div className="form-actions"><button className="secondary compact" onClick={()=>{setResetOpen(false);setResetPhrase("")}}>Cancelar</button><button className="primary compact" disabled={busy||resetPhrase!=="ZERAR DADOS"} onClick={()=>void resetFinancialData()}>Zerar dados financeiros</button></div></div>}</div>
   <div><strong>Exportar lançamentos</strong><p>Gera CSV para Excel ou LibreOffice.</p><button className="secondary compact" onClick={()=>exportTransactionsCsv(data)}>Exportar CSV</button></div>
   <div><strong>Importar backup</strong><p>O arquivo é validado antes de substituir os dados locais.</p><input type="file" accept="application/json,.json" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.currentTarget.value=""}}/></div>
   <div><strong>Sessão</strong><p>Encerrar a sessão neste aparelho.</p><button className="secondary compact" onClick={()=>void onSignOut()}>Sair da conta</button></div>

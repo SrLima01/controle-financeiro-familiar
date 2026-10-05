@@ -131,3 +131,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .theme-choice button{border:1px solid #d8dde6;background:#fff;color:#172033;border-radius:12px;padding:11px 14px;font-weight:800;min-height:44px}
 .theme-choice button.active{background:#172033;color:#fff;border-color:#172033}
 @media(max-width:620px){.theme-choice{width:100%}.theme-choice button{flex:1 1 140px}}
+
+.danger-zone{margin-top:10px;padding-top:16px;border-top:1px solid #e6d7d7}
+.danger-button{color:#a13b3b}
+.reset-confirm{margin-top:12px;padding:14px;border:1px solid #e2bcbc;border-radius:14px;background:#fff8f8}
+.reset-confirm p{line-height:1.45}
+.reset-confirm input{width:100%;margin-top:6px;padding:12px;border:1px solid #d8dde6;border-radius:12px;background:#fff}
+:root[data-theme="dark"] .danger-zone{border-top-color:var(--border)}
+:root[data-theme="dark"] .reset-confirm{background:#291b1f;border-color:#61343a}
