@@ -11,7 +11,11 @@ export function validateAccountUpdate(previous:Account,next:Account,transactions
    throw new Error("O saldo inicial não pode ser alterado após haver movimentações na conta.");
  }
 }
-export function validateTransactionUpdate(previous:Transaction,next:Transaction):void{\n if(previous.id!==next.id)throw new Error("Lançamento inválido para edição");\n if(previous.type!==next.type)throw new Error("O tipo do lançamento não pode ser alterado depois que ele foi criado. Cancele o lançamento e crie outro tipo, se necessário.");\n}\nexport function validateTransaction(tx:Transaction,data:FinancialData):void{
+export function validateTransactionUpdate(previous:Transaction,next:Transaction):void{
+ if(previous.id!==next.id)throw new Error("Lançamento inválido para edição");
+ if(previous.type!==next.type)throw new Error("O tipo do lançamento não pode ser alterado depois que ele foi criado. Cancele o lançamento e crie outro tipo, se necessário.");
+}
+export function validateTransaction(tx:Transaction,data:FinancialData):void{
  if(!tx.id)throw new Error("Transaction id is required");
  assertFinancialDate(tx.date);
  assertNonNegativeCents(tx.amountCents);
