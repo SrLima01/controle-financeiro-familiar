@@ -93,7 +93,8 @@ export function generateRecurringTransactions(
   if(!rule.active) return {data,generated:[]};
   const existingDates=new Set(
     rule.transactionIds
-      .map(id=>data.transactions.find(t=>t.id===id)?.date)
+      .map(id=>data.transactions.find(t=>t.id===id))
+      .map(tx=>tx?.recurringScheduledDate??tx?.date)
       .filter((d):d is string=>Boolean(d))
   );
   const generated:Transaction[]=[];
@@ -107,7 +108,7 @@ export function generateRecurringTransactions(
         type:rule.type,
         status:rule.status,
         amountCents:rule.amountCents,
-        description:rule.description,
+        description:rule.description,\n        recurringScheduledDate:date,
         ...(rule.categoryId?{categoryId:rule.categoryId}:{}),
         ...(rule.accountId?{accountId:rule.accountId}:{}),
         ...(rule.creditCardId?{creditCardId:rule.creditCardId}:{}),
