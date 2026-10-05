@@ -14,7 +14,7 @@ import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator"
 import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
 import { assertCents } from "../domain/money/cents";
 import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
-import { applyRecurringRuleToFutureTransactions, createRecurringRule, deactivateRecurringRule, generateRecurringTransactions, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
+import { applyRecurringOccurrenceEdit, applyRecurringRuleToFutureTransactions, createRecurringRule, deactivateRecurringRule, generateRecurringTransactions, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
 import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
 import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
 import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
@@ -265,13 +265,14 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [creatingCategory,setCreatingCategory]=useState(false);
  const [filter,setFilter]=useState<"ALL"|"INCOME"|"EXPENSE"|"TRANSFER"|"CARD_PAYMENT">("ALL");
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
+ const [pendingRecurringEdit,setPendingRecurringEdit]=useState<{previous:Transaction;next:Transaction}|null>(null);
  const [view,setView]=useState<"new"|"history">("new");
  const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
  const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
 
- function reset(){setEditing(null);setLaunchMode("unique");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
+ function reset(){setPendingRecurringEdit(null);setEditing(null);setLaunchMode("unique");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
  function edit(t:Transaction){
    if(t.installmentGroupId){setError("Parcelas vinculadas devem ser gerenciadas pelo grupo. Use os comandos de cancelamento abaixo.");return;}
    setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new");setLaunchMode("unique")
@@ -306,8 +307,11 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
        const available=calculateCardAvailableLimit(card,data.transactions)+(editing?.creditCardId===card.id&&editing.type==="EXPENSE"?editing.amountCents:0);
        if(amountCents>available) throw new Error(`Limite disponível insuficiente. Disponível: ${money(available)}.`);
      }
-     if(editing) validateRecurringTransactionUpdate(editing,tx,data.recurringRules);
      validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});
+     if(editing&&recurringGenerated){
+       const changed=editing.date!==tx.date||editing.amountCents!==tx.amountCents||editing.description!==tx.description||editing.status!==tx.status||editing.categoryId!==tx.categoryId||editing.accountId!==tx.accountId||editing.destinationAccountId!==tx.destinationAccountId||editing.creditCardId!==tx.creditCardId||editing.personId!==tx.personId;
+       if(changed){setPendingRecurringEdit({previous:editing,next:tx});return;}
+     } else if(editing) validateRecurringTransactionUpdate(editing,tx,data.recurringRules);
      const next={...data,transactions:editing?data.transactions.map(t=>t.id===tx.id?tx:t):[...data.transactions,tx]};
      setBusy(true);await onChange(next);reset();
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false)}
@@ -330,12 +334,13 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    <div className="subnav transaction-tabs"><button className={view==="new"?"active":""} onClick={()=>{setView("new");setError("")}}>Novo lançamento</button><button className={view==="history"?"active":""} onClick={()=>{setView("history");setError("")}}>Lançamentos feitos <span>({data.transactions.length})</span></button></div>
    {error&&<div className="global-alert">{error}</div>}
    {view==="new"&&<div className="subnav launch-mode-tabs"><button className={launchMode==="unique"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("unique");setError("")}}>Lançamento único</button><button className={launchMode==="recurring"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("recurring");setError("")}}>Lançamento recorrente</button></div>}
+   {pendingRecurringEdit&&<section className="panel recurring-edit-choice"><div className="section-title"><div><span className="eyebrow">Ocorrência recorrente</span><h2>Como aplicar esta alteração?</h2><p className="form-note">A data agendada desta ocorrência será preservada. Você pode alterar apenas esta ocorrência ou aplicar a mudança a ela e às próximas.</p></div></div><div className="form-actions"><button className="primary" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange(applyRecurringOccurrenceEdit(data,pendingRecurringEdit.previous,pendingRecurringEdit.next,"ONLY_THIS"));reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível ajustar a ocorrência.")}finally{setBusy(false)}}}>Somente este lançamento</button><button className="secondary" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange(applyRecurringOccurrenceEdit(data,pendingRecurringEdit.previous,pendingRecurringEdit.next,"THIS_AND_FOLLOWING"));reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível aplicar aos próximos.")}finally{setBusy(false)}}}>Este e os próximos</button><button className="secondary" disabled={busy} onClick={()=>setPendingRecurringEdit(null)}>Cancelar</button></div></section>}
    {view==="history"&&<><div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
    <section className="panel transaction-list">{visible.length===0?<Empty text="Nenhum lançamento encontrado."/>:visible.map(t=>{
      const group=t.installmentGroupId?data.installmentGroups.find(g=>g.id===t.installmentGroupId):undefined;
      const n=group?getInstallmentNumber(group,t.id):undefined;
      const recurringRule=data.recurringRules.find(rule=>rule.transactionIds.includes(t.id));
-     return <div className={recurringRule?"transaction-row transaction-row-recurring":"transaction-row"} key={t.id}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date} · {labelType(t)} · {t.status}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
+     return <div className={recurringRule?"transaction-row transaction-row-recurring":"transaction-row"} key={t.id}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date}{t.scheduledDate&&t.scheduledDate!==t.date?` · agendada ${t.scheduledDate}`:""} · {labelType(t)} · {t.status}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
        <div className="transaction-value"><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":"+"}{money(t.amountCents)}</strong><div className="row-actions">
          {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>} </> :
            <>{<button className="link-button" onClick={()=>edit(t)}>Editar</button>}{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
