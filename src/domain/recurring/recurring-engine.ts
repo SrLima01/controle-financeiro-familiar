@@ -15,7 +15,7 @@ export function applyRecurringOccurrenceEdit(data:EntityCollection,previous:Tran
  const rule=data.recurringRules.find(r=>r.transactionIds.includes(previous.id));if(!rule)throw new Error("Ocorrência recorrente não encontrada.");
  const scheduledDate=getRecurringScheduledDate(previous);const edited=buildRecurringOccurrenceOverride(previous,next);
  if(scope==="ONLY_THIS")return {...data,transactions:data.transactions.map(tx=>tx.id===previous.id?edited:tx)};
- const updatedRule={...rule,description:edited.description,amountCents:edited.amountCents,status:edited.status,categoryId:edited.categoryId,accountId:edited.accountId,creditCardId:edited.creditCardId,personId:edited.personId};
+ const updatedRule:RecurringRule={...rule,description:edited.description,amountCents:edited.amountCents,status:edited.status as RecurringRule["status"],categoryId:edited.categoryId,accountId:edited.accountId,creditCardId:edited.creditCardId,personId:edited.personId};
  const nextData=applyRecurringRuleToFutureTransactions(data,rule,updatedRule,scheduledDate);
  return {...nextData,transactions:nextData.transactions.map(tx=>tx.id===previous.id?edited:tx),recurringRules:nextData.recurringRules.map(r=>r.id===rule.id?updatedRule:r)};
 }
