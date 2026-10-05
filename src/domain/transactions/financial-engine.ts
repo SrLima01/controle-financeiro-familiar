@@ -4,7 +4,7 @@ const real=(s:TransactionStatus)=>s==="PAID"||s==="RECEIVED";
 const hasAccount=(as:readonly Account[],id:string)=>as.some(a=>a.id===id);
 const hasCard=(cs:readonly CreditCard[],id:string)=>cs.some(c=>c.id===id);
 const hasId=(items:readonly {id:string}[],id:string)=>items.some(x=>x.id===id);
-export function validateAccountUpdate(previous:Account,next:Account,transactions:readonly Transaction[]):void{
+export function validateAccountArchive(account:Account,recurringRules:readonly {active:boolean;accountId?:string}[]):void{\n if(!account.active)return;\n if(recurringRules.some(rule=>rule.active&&rule.accountId===account.id)) throw new Error("A conta não pode ser arquivada enquanto houver uma recorrência ativa vinculada.");\n}\n\nexport function validateAccountUpdate(previous:Account,next:Account,transactions:readonly Transaction[]):void{
  if(previous.id!==next.id)throw new Error("Conta inválida para edição");
  if(next.openingBalanceCents<0)throw new Error("Saldo inicial não pode ser negativo");
  if(previous.openingBalanceCents!==next.openingBalanceCents&&transactions.some(tx=>tx.status!=="CANCELLED"&&(tx.accountId===previous.id||tx.destinationAccountId===previous.id))){
