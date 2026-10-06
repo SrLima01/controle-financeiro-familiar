@@ -110,28 +110,67 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
   const [name,setName]=useState("");
   const [code,setCode]=useState("");
   const [busy,setBusy]=useState(false);
+  const [loadingFamilies,setLoadingFamilies]=useState(true);
   const [error,setError]=useState("");
-  useEffect(()=>{ listMyFamilies().then(setFamilies).catch(e=>setError(e instanceof Error?e.message:"Não foi possível carregar as famílias.")); },[]);
+
+  async function loadFamilies() {
+    setLoadingFamilies(true);
+    setError("");
+    try {
+      setFamilies(await listMyFamilies());
+    } catch(e) {
+      setError(e instanceof Error ? e.message : "Não foi possível carregar as famílias.");
+    } finally {
+      setLoadingFamilies(false);
+    }
+  }
+
+  useEffect(()=>{ void loadFamilies(); },[]);
+
   async function create() {
     if (!name.trim()) return;
     setBusy(true);setError("");
-    try { const id=await createFamily(name.trim()); const created=(await listMyFamilies()).find(f=>f.id===id); if(created) onReady(created); else setError("Família criada, mas não foi possível carregar seus dados."); } catch(e){setError(e instanceof Error?e.message:"Não foi possível criar.");} finally{setBusy(false);}
+    try {
+      const id=await createFamily(name.trim());
+      const created=(await listMyFamilies()).find(f=>f.id===id);
+      if(created) onReady(created);
+      else setError("Família criada, mas não foi possível carregar seus dados.");
+    } catch(e) {
+      setError(e instanceof Error?e.message:"Não foi possível criar.");
+    } finally {setBusy(false);}
   }
+
   async function join() {
     if (!code.trim()) return;
     setBusy(true);setError("");
-    try { const id=await joinFamily(code.trim().toUpperCase()); const found=(await listMyFamilies()).find(f=>f.id===id); if(found) onReady(found); else setError("Família vinculada, mas não foi possível carregar seus dados."); } catch(e){setError(e instanceof Error?e.message:"Não foi possível entrar.");} finally{setBusy(false);}
+    try {
+      const id=await joinFamily(code.trim().toUpperCase());
+      const found=(await listMyFamilies()).find(f=>f.id===id);
+      if(found) onReady(found);
+      else setError("Família vinculada, mas não foi possível carregar seus dados.");
+    } catch(e) {
+      setError(e instanceof Error?e.message:"Não foi possível entrar.");
+    } finally {setBusy(false);}
   }
+
   return <main className="auth-page"><section className="panel family-panel">
-    <h1>Escolha sua família</h1><p className="muted">A família define o conjunto financeiro que será sincronizado entre os aparelhos.</p>
-    {families.length>0 && <div className="family-list">{families.map(f=><button key={f.id} className="family-card" onClick={()=>onReady(f)}><strong>{f.name}</strong><span>Família sincronizada</span></button>)}</div>}
+    <div className="family-account">
+      <span>Conta conectada</span>
+      <strong>{user.email ?? "E-mail não disponível"}</strong>
+      <button className="link-button" type="button" onClick={()=>void signOut()}>Sair</button>
+    </div>
+    <h1>Escolha sua família</h1>
+    <p className="muted">A família define o conjunto financeiro que será sincronizado entre os aparelhos.</p>
+    {loadingFamilies && <div className="loading">Carregando suas famílias…</div>}
+    {!loadingFamilies && families.length>0 && <div className="family-list">{families.map(f=><button key={f.id} className="family-card" onClick={()=>onReady(f)}><strong>{f.name}</strong><span>Família sincronizada</span></button>)}</div>}
     <div className="split-line"><span>ou</span></div>
-    <h2>Criar nova família</h2><div className="inline-form"><input placeholder="Ex.: Nossa casa" value={name} onChange={e=>setName(e.target.value)}/><button className="primary" disabled={busy} onClick={create}>Criar</button></div>
-    <h2>Entrar com código</h2><div className="inline-form"><input placeholder="Código de convite" value={code} onChange={e=>setCode(e.target.value)}/><button className="secondary" disabled={busy} onClick={join}>Entrar</button></div>
-    {error && <div className="alert error">{error}</div>}
+    <h2>Criar nova família</h2>
+    <div className="inline-form"><input placeholder="Ex.: Nossa casa" value={name} onChange={e=>setName(e.target.value)} disabled={busy}/><button className="primary" disabled={busy||!name.trim()} onClick={create}>Criar</button></div>
+    <h2>Entrar com código</h2>
+    <div className="inline-form"><input placeholder="Código de convite" value={code} onChange={e=>setCode(e.target.value)} disabled={busy}/><button className="secondary" disabled={busy||!code.trim()} onClick={join}>Entrar</button></div>
+    {error && <div className="alert error">{error}<button className="link-button" type="button" onClick={()=>void loadFamilies()}>Tentar novamente</button></div>}
   </section></main>;
 }
-
 function Dashboard({data,onQuickAction,hideValues,onToggleHideValues}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt"|"manual")=>void;hideValues:boolean;onToggleHideValues:()=>void}) {
   const [planningPeriod,setPlanningPeriod]=useState(currentMonthKey());
   const periodOptions=useMemo(()=>{
