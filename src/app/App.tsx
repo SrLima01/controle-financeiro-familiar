@@ -171,7 +171,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
     {error && <div className="alert error">{error}<button className="link-button" type="button" onClick={()=>void loadFamilies()}>Tentar novamente</button></div>}
   </section></main>;
 }
-function Dashboard({data,onQuickAction,hideValues,onToggleHideValues}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt"|"manual")=>void;hideValues:boolean;onToggleHideValues:()=>void}) {
+function Dashboard({data,onQuickAction,hideValues,onToggleHideValues,syncStatus}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt"|"manual")=>void;hideValues:boolean;onToggleHideValues:()=>void;syncStatus:"syncing"|"synced"|"conflict"|"error"}) {
   const [planningPeriod,setPlanningPeriod]=useState(currentMonthKey());
   const periodOptions=useMemo(()=>{
     const months=new Set<string>([currentMonthKey()]);
@@ -187,7 +187,7 @@ function Dashboard({data,onQuickAction,hideValues,onToggleHideValues}:{data:Enti
     .reduce((sum,t)=>sum+(t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0),[data.transactions,planningPeriod]);
 
   return <div className="page-content">
-    <div className="page-heading"><div><span className="eyebrow">{planningPeriod==="ALL"?"Planejamento completo":monthLabel(planningPeriod)}</span><h1>Visão geral</h1></div><div className="dashboard-heading-actions"><button className="value-visibility-button" type="button" onClick={onToggleHideValues} aria-label={hideValues?"Mostrar valores financeiros":"Ocultar valores financeiros"} title={hideValues?"Mostrar valores":"Ocultar valores"}><svg className="visibility-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg><span>{hideValues?"Mostrar":"Ocultar"}</span></button><span className="sync-dot">Local</span></div></div>
+    <div className="page-heading"><div><span className="eyebrow">{planningPeriod==="ALL"?"Planejamento completo":monthLabel(planningPeriod)}</span><h1>Visão geral</h1></div><div className="dashboard-heading-actions"><button className="value-visibility-button" type="button" onClick={onToggleHideValues} aria-label={hideValues?"Mostrar valores financeiros":"Ocultar valores financeiros"} title={hideValues?"Mostrar valores":"Ocultar valores"}><svg className="visibility-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg><span>{hideValues?"Mostrar":"Ocultar"}</span></button><span className={`sync-dot sync-${syncStatus}`}>{syncStatus==="syncing"?"Sincronizando…":syncStatus==="conflict"?"Conflito":syncStatus==="error"?"Erro de sincronização":"Sincronizado"}</span></div></div>
     <section className="quick-actions">
       <button className="quick-action quick-action-primary" onClick={()=>onQuickAction("smart")}><span className="quick-action-icon" aria-hidden="true">🎙</span><span><strong>Lançar com áudio</strong><small>Fale o gasto e revise antes de salvar</small></span><b aria-hidden="true">›</b></button>
       <button className="quick-action" onClick={()=>onQuickAction("receipt")}><span className="quick-action-icon" aria-hidden="true">📷</span><span><strong>Fotografar recibo</strong><small>Leia o valor e confira o lançamento</small></span><b aria-hidden="true">›</b></button>
@@ -896,6 +896,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   }
   const [data,setData]=useState<EntityCollection>(emptyData);
   const [loading,setLoading]=useState(true);
+  const [syncStatus,setSyncStatus]=useState<"syncing"|"synced"|"conflict"|"error">("syncing");
   const [error,setError]=useState("");
   const [conflict,setConflict]=useState<{local:EntityCollection;remote:EntityCollection;remoteVersion:number}|null>(null);
   const [remoteVersion,setRemoteVersion]=useState(0);
@@ -905,6 +906,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   useEffect(()=>{
     setLoading(true);
     setError("");
+    setSyncStatus("syncing");
     setConflict(null);
     setRemoteVersion(0);
     setLegacyData(null);
@@ -928,16 +930,20 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
           if(remote && remote.version!==syncMeta.remoteVersion){
             setConflict({local,remote:remote.state,remoteVersion:remote.version});
             setRemoteVersion(remote.version);
+          setSyncStatus("synced");
+            setSyncStatus("conflict");
           }else{
             const result=await pushFromLocalFirst(family.id,local,syncMeta.remoteVersion);
             if(result.kind==="pushed"){
               await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
               setRemoteVersion(result.version);
+              setSyncStatus("synced");
             }else{
               const latest=await pullFinanceState(family.id);
               if(latest){
                 setConflict({local,remote:latest.state,remoteVersion:latest.version});
                 setRemoteVersion(latest.version);
+                setSyncStatus("conflict");
               }
             }
           }
@@ -950,13 +956,14 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
         }else{
           setRemoteVersion(syncMeta.remoteVersion);
         }
-      } catch(e){ if(!cancelled)setError(e instanceof Error?e.message:"Falha ao carregar dados."); }
+      } catch(e){ if(!cancelled){setError(e instanceof Error?e.message:"Falha ao carregar dados.");setSyncStatus("error");} }
       finally{if(!cancelled)setLoading(false);}
     })();
     return ()=>{cancelled=true};
   },[family.id]);
   async function persist(next:EntityCollection){
     setError("");
+    setSyncStatus("syncing");
     await repo.replaceAll(next);
     await repo.setSyncMetadata({remoteVersion,dirty:true});
     setData(next);
@@ -965,10 +972,11 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
       await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
       setRemoteVersion(result.version);
       setConflict(null);
+      setSyncStatus("synced");
       return;
     }
     const remote=await pullFinanceState(family.id);
-    if(remote){setConflict({local:next,remote:remote.state,remoteVersion:remote.version});setRemoteVersion(remote.version);}
+    if(remote){setConflict({local:next,remote:remote.state,remoteVersion:remote.version});setRemoteVersion(remote.version);setSyncStatus("conflict");}
     throw new Error("Conflito de sincronização: outro aparelho alterou os dados online. Escolha abaixo qual estado deve prevalecer.");
   }
   async function keepRemote(){
@@ -978,6 +986,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     setData(conflict.remote);
     setRemoteVersion(conflict.remoteVersion);
     setConflict(null);
+    setSyncStatus("synced");
     setError("");
   }
   async function keepLocal(){
@@ -989,12 +998,13 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
       await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
       setRemoteVersion(result.version);
       setConflict(null);
+      setSyncStatus("synced");
       setError("");
       return;
     }
     setError("O estado online mudou novamente. Atualize a tela e resolva o novo conflito.");
   }
-  const content = page==="dashboard" ? <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues}/> :
+  const content = page==="dashboard" ? <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus}/> :
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
