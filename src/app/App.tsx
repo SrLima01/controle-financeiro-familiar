@@ -965,20 +965,32 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   async function persist(next:EntityCollection){
     setError("");
     setSyncStatus("syncing");
-    await repo.replaceAll(next);
-    await repo.setSyncMetadata({remoteVersion,dirty:true});
-    setData(next);
-    const result=await pushFromLocalFirst(family.id,next,remoteVersion);
-    if(result.kind==="pushed"){
-      await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
-      setRemoteVersion(result.version);
-      setConflict(null);
-      setSyncStatus("synced");
-      return;
+    try{
+      await repo.replaceAll(next);
+      await repo.setSyncMetadata({remoteVersion,dirty:true});
+      setData(next);
+      const result=await pushFromLocalFirst(family.id,next,remoteVersion);
+      if(result.kind==="pushed"){
+        await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
+        setRemoteVersion(result.version);
+        setConflict(null);
+        setSyncStatus("synced");
+        return;
+      }
+      const remote=await pullFinanceState(family.id);
+      if(remote){
+        const normalized={...remote.state,categories:normalizeCategoryEmojis(remote.state.categories)};
+        setConflict({local:next,remote:normalized,remoteVersion:remote.version});
+        setRemoteVersion(remote.version);
+        setSyncStatus("conflict");
+      }
+      throw new Error("Conflito de sincronização: outro aparelho alterou os dados online. Escolha abaixo qual estado deve prevalecer.");
+    }catch(error){
+      if(error instanceof Error && error.message.startsWith("Conflito de sincronização:")) throw error;
+      setSyncStatus("error");
+      setError(error instanceof Error?error.message:"Não foi possível salvar e sincronizar os dados.");
+      throw error;
     }
-    const remote=await pullFinanceState(family.id);
-    if(remote){setConflict({local:next,remote:remote.state,remoteVersion:remote.version});setRemoteVersion(remote.version);setSyncStatus("conflict");}
-    throw new Error("Conflito de sincronização: outro aparelho alterou os dados online. Escolha abaixo qual estado deve prevalecer.");
   }
   async function keepRemote(){
     if(!conflict)return;
@@ -1009,17 +1021,38 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   async function keepLocal(){
     if(!conflict)return;
     setError("");
-    await repo.setSyncMetadata({remoteVersion:conflict.remoteVersion,dirty:true});
-    const result=await pushFromLocalFirst(family.id,conflict.local,conflict.remoteVersion);
-    if(result.kind==="pushed"){
-      await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
-      setRemoteVersion(result.version);
-      setConflict(null);
-      setSyncStatus("synced");
-      setError("");
-      return;
+    setSyncStatus("syncing");
+    try{
+      const latest=await pullFinanceState(family.id);
+      if(!latest) throw new Error("O estado online não está mais disponível. Atualize e tente novamente.");
+      if(latest.version!==conflict.remoteVersion){
+        const normalized={...latest.state,categories:normalizeCategoryEmojis(latest.state.categories)};
+        setConflict({local:conflict.local,remote:normalized,remoteVersion:latest.version});
+        setRemoteVersion(latest.version);
+        setSyncStatus("conflict");
+        return;
+      }
+      await repo.setSyncMetadata({remoteVersion:latest.version,dirty:true});
+      const result=await pushFromLocalFirst(family.id,conflict.local,latest.version);
+      if(result.kind==="pushed"){
+        await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
+        setRemoteVersion(result.version);
+        setConflict(null);
+        setSyncStatus("synced");
+        setError("");
+        return;
+      }
+      const refreshed=await pullFinanceState(family.id);
+      if(refreshed){
+        const normalized={...refreshed.state,categories:normalizeCategoryEmojis(refreshed.state.categories)};
+        setConflict({local:conflict.local,remote:normalized,remoteVersion:refreshed.version});
+        setRemoteVersion(refreshed.version);
+        setSyncStatus("conflict");
+      }
+    }catch(error){
+      setSyncStatus("error");
+      setError(error instanceof Error?error.message:"Não foi possível manter os dados deste aparelho.");
     }
-    setError("O estado online mudou novamente. Atualize a tela e resolva o novo conflito.");
   }
   const content = page==="dashboard" ? <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus}/> :
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
