@@ -930,7 +930,6 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
           if(remote && remote.version!==syncMeta.remoteVersion){
             setConflict({local,remote:remote.state,remoteVersion:remote.version});
             setRemoteVersion(remote.version);
-          setSyncStatus("synced");
             setSyncStatus("conflict");
           }else{
             const result=await pushFromLocalFirst(family.id,local,syncMeta.remoteVersion);
@@ -953,8 +952,10 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
           await repo.setSyncMetadata({remoteVersion:remote.version,dirty:false});
           setData(normalizedRemote);
           setRemoteVersion(remote.version);
+          setSyncStatus("synced");
         }else{
           setRemoteVersion(syncMeta.remoteVersion);
+          setSyncStatus("synced");
         }
       } catch(e){ if(!cancelled){setError(e instanceof Error?e.message:"Falha ao carregar dados.");setSyncStatus("error");} }
       finally{if(!cancelled)setLoading(false);}
@@ -981,13 +982,29 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   }
   async function keepRemote(){
     if(!conflict)return;
-    await repo.replaceAll(conflict.remote);
-    await repo.setSyncMetadata({remoteVersion:conflict.remoteVersion,dirty:false});
-    setData(conflict.remote);
-    setRemoteVersion(conflict.remoteVersion);
-    setConflict(null);
-    setSyncStatus("synced");
     setError("");
+    setSyncStatus("syncing");
+    try{
+      const latest=await pullFinanceState(family.id);
+      if(!latest) throw new Error("O estado online não está mais disponível. Atualize e tente novamente.");
+      if(latest.version!==conflict.remoteVersion){
+        const normalized={...latest.state,categories:normalizeCategoryEmojis(latest.state.categories)};
+        setConflict({local:conflict.local,remote:normalized,remoteVersion:latest.version});
+        setRemoteVersion(latest.version);
+        setSyncStatus("conflict");
+        return;
+      }
+      const normalized={...latest.state,categories:normalizeCategoryEmojis(latest.state.categories)};
+      await repo.replaceAll(normalized);
+      await repo.setSyncMetadata({remoteVersion:latest.version,dirty:false});
+      setData(normalized);
+      setRemoteVersion(latest.version);
+      setConflict(null);
+      setSyncStatus("synced");
+    }catch(error){
+      setSyncStatus("error");
+      setError(error instanceof Error?error.message:"Não foi possível usar os dados online.");
+    }
   }
   async function keepLocal(){
     if(!conflict)return;
@@ -1009,7 +1026,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
     page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} theme={theme} onThemeChange={changeTheme}/> : page==="relatorios" ? <Reports data={data}/> :
-    <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus}/>;
+    <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues}/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar família</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
     {legacyData && <section className="panel sync-conflict"><strong>Dados locais de uma versão anterior encontrados</strong><p>Encontramos dados salvos neste aparelho antes da separação por família. Eles não foram misturados automaticamente.</p><p>Se esta família já possui dados financeiros, não importe os dados antigos: a importação substitui o estado financeiro atual da família.</p><div className="form-actions"><button className="secondary compact" onClick={()=>{localStorage.setItem(`legacy-migration-dismissed-${family.id}`,"1");setLegacyData(null);}}>Ignorar</button><button className="primary compact" onClick={()=>{const old=legacyData;if(!old)return;const currentHasData=Object.values(data).some(items=>items.length>0);if(currentHasData){setError("A família atual já possui dados. Por segurança, os dados locais antigos não podem substituir esse estado automaticamente. Exporte um backup e faça a migração somente após confirmar que a família está vazia.");return;}void persist(old).then(()=>{localStorage.setItem(`legacy-migration-completed-${family.id}`,"1");setLegacyData(null)}).catch(e=>setError(e instanceof Error?e.message:"Não foi possível importar os dados antigos."));}}>Importar dados antigos</button></div></section>}
