@@ -928,11 +928,13 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
 
         if(syncMeta.dirty){
           if(remote && remote.version!==syncMeta.remoteVersion){
-            setConflict({local,remote:remote.state,remoteVersion:remote.version});
+            const normalizedRemote={...remote.state,categories:normalizeCategoryEmojis(remote.state.categories)};
+            setConflict({local,remote:normalizedRemote,remoteVersion:remote.version});
             setRemoteVersion(remote.version);
             setSyncStatus("conflict");
           }else{
-            const result=await pushFromLocalFirst(family.id,local,syncMeta.remoteVersion);
+            const expectedVersion=remote?.version ?? 0;
+            const result=await pushFromLocalFirst(family.id,local,expectedVersion);
             if(result.kind==="pushed"){
               await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
               setRemoteVersion(result.version);
@@ -940,9 +942,12 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
             }else{
               const latest=await pullFinanceState(family.id);
               if(latest){
-                setConflict({local,remote:latest.state,remoteVersion:latest.version});
+                const normalizedLatest={...latest.state,categories:normalizeCategoryEmojis(latest.state.categories)};
+                setConflict({local,remote:normalizedLatest,remoteVersion:latest.version});
                 setRemoteVersion(latest.version);
                 setSyncStatus("conflict");
+              }else{
+                throw new Error("Não foi possível confirmar o estado online após o conflito.");
               }
             }
           }
@@ -953,9 +958,17 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
           setData(normalizedRemote);
           setRemoteVersion(remote.version);
           setSyncStatus("synced");
+        }else if(family.created_by===user.id){
+          const result=await pushFromLocalFirst(family.id,local,0);
+          if(result.kind==="pushed"){
+            await repo.setSyncMetadata({remoteVersion:result.version,dirty:false});
+            setRemoteVersion(result.version);
+            setSyncStatus("synced");
+          }else{
+            throw new Error("Não foi possível inicializar os dados online da família.");
+          }
         }else{
-          setRemoteVersion(syncMeta.remoteVersion);
-          setSyncStatus("synced");
+          throw new Error("A família ainda não possui dados online. Aguarde o aparelho que criou a família concluir a sincronização e tente novamente.");
         }
       } catch(e){ if(!cancelled){setError(e instanceof Error?e.message:"Falha ao carregar dados.");setSyncStatus("error");} }
       finally{if(!cancelled)setLoading(false);}
