@@ -560,7 +560,7 @@ function Reports({data}:{data:EntityCollection}) {
  </div>;
 }
 
-function Settings({data,family,onChange,onSignOut,theme,onThemeChange}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;theme:"light"|"dark";onThemeChange:(theme:"light"|"dark")=>void}) {
+function Settings({data,family,onChange,onSignOut,theme,onThemeChange,syncStatus}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;theme:"light"|"dark";onThemeChange:(theme:"light"|"dark")=>void;syncStatus:"syncing"|"synced"|"conflict"|"error"}) {
  const [error,setError]=useState(""); const [busy,setBusy]=useState(false); const [resetOpen,setResetOpen]=useState(false); const [resetPhrase,setResetPhrase]=useState("");
  async function importFile(file:File){
   setError("");setBusy(true);
@@ -572,8 +572,9 @@ function Settings({data,family,onChange,onSignOut,theme,onThemeChange}:{data:Ent
   finally{setBusy(false);}
  }
  async function resetFinancialData(){
+  if(syncStatus!=="synced"){setError("Aguarde a sincronização concluir antes de zerar os dados da família.");return;}
   if(resetPhrase!=="ZERAR DADOS"){setError("Digite exatamente ZERAR DADOS para confirmar.");return;}
-  if(!confirm("Isto apagará contas, cartões, lançamentos, parcelas, recorrências, caixinhas, orçamentos e pessoas desta família. As categorias serão preservadas. A conta/login e a família serão mantidos. Deseja realmente continuar?"))return;
+  if(!confirm("ATENÇÃO: este comando zera os DADOS FINANCEIROS DA FAMÍLIA e será sincronizado com todos os aparelhos. Contas, cartões, lançamentos, parcelas, recorrências, caixinhas, orçamentos e pessoas serão apagados. Categorias, família e login serão preservados. Faça um backup antes de continuar. Deseja realmente apagar os dados da família?"))return;
   setError("");setBusy(true);
   try{
    const next:EntityCollection={...data,people:[],accounts:[],cards:[],transactions:[],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[]};
@@ -590,7 +591,7 @@ function Settings({data,family,onChange,onSignOut,theme,onThemeChange}:{data:Ent
  <section className="panel settings-list">
    <div><strong>Tema da interface</strong><p>Escolha entre o modo claro e o modo escuro. A preferência fica salva neste aparelho.</p><div className="theme-choice" role="group" aria-label="Tema da interface"><button className={theme==="light"?"active":""} onClick={()=>onThemeChange("light")} aria-pressed={theme==="light"}>☀️ Claro</button><button className={theme==="dark"?"active":""} onClick={()=>onThemeChange("dark")} aria-pressed={theme==="dark"}>🌙 Escuro</button></div></div>
   <div><strong>Backup completo</strong><p>Exporta todas as entidades financeiras em JSON.</p><button className="primary compact" onClick={()=>exportJson(data)}>Exportar JSON</button></div>
-  <div className="danger-zone"><strong>Zerar dados financeiros</strong><p>Remove os dados de teste desta família, mas preserva categorias, família, login e estrutura do aplicativo. Faça um backup antes se quiser manter uma cópia.</p><button className="secondary compact danger-button" onClick={()=>{setResetOpen(true);setResetPhrase("");setError("")}} disabled={busy}>Abrir reset seguro</button>{resetOpen&&<div className="reset-confirm"><strong>Confirmação obrigatória</strong><p>Digite <b>ZERAR DADOS</b> para habilitar a exclusão.</p><input value={resetPhrase} onChange={e=>setResetPhrase(e.target.value.toUpperCase())} placeholder="ZERAR DADOS" autoCapitalize="characters"/><div className="form-actions"><button className="secondary compact" onClick={()=>{setResetOpen(false);setResetPhrase("")}}>Cancelar</button><button className="primary compact" disabled={busy||resetPhrase!=="ZERAR DADOS"} onClick={()=>void resetFinancialData()}>Zerar dados financeiros</button></div></div>}</div>
+  <div className="danger-zone"><strong>Zerar dados financeiros</strong><p>Apaga os dados financeiros <b>da família inteira</b> e sincroniza a limpeza com os outros aparelhos. Faça um backup antes. O reset fica bloqueado enquanto houver sincronização pendente ou conflito.</p><button className="secondary compact danger-button" onClick={()=>{setResetOpen(true);setResetPhrase("");setError("")}} disabled={busy||syncStatus!=="synced"}>Abrir reset seguro</button>{resetOpen&&<div className="reset-confirm"><strong>Confirmação obrigatória</strong><p>Este é um reset compartilhado. Antes de continuar, confirme que você exportou um backup e que não precisa dos dados atuais.</p><p>Digite <b>ZERAR DADOS</b> para habilitar a exclusão.</p><input value={resetPhrase} onChange={e=>setResetPhrase(e.target.value.toUpperCase())} placeholder="ZERAR DADOS" autoCapitalize="characters"/><div className="form-actions"><button className="secondary compact" onClick={()=>{setResetOpen(false);setResetPhrase("")}}>Cancelar</button><button className="primary compact" disabled={busy||resetPhrase!=="ZERAR DADOS"} onClick={()=>void resetFinancialData()}>Zerar dados financeiros</button></div></div>}</div>
   <div><strong>Exportar lançamentos</strong><p>Gera CSV para Excel ou LibreOffice.</p><button className="secondary compact" onClick={()=>exportTransactionsCsv(data)}>Exportar CSV</button></div>
   <div><strong>Importar backup</strong><p>O arquivo é validado antes de substituir os dados locais.</p><input type="file" accept="application/json,.json" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.currentTarget.value=""}}/></div>
   <div><strong>Sessão</strong><p>Encerrar a sessão neste aparelho.</p><button className="secondary compact" onClick={()=>void onSignOut()}>Sair da conta</button></div>
@@ -1071,7 +1072,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
-    page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} theme={theme} onThemeChange={changeTheme}/> : page==="relatorios" ? <Reports data={data}/> :
+    page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} theme={theme} onThemeChange={changeTheme} syncStatus={syncStatus}/> : page==="relatorios" ? <Reports data={data}/> :
     <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus}/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar família</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
