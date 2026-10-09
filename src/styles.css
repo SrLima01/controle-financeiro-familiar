@@ -215,3 +215,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   .more-menu-copy small{display:block}
   .more-menu-arrow{display:block}
 }
+
+@media(max-width:699px){
+  .bottom-nav{overflow:hidden}
+  .bottom-nav button{flex:1 1 0;min-width:0;padding-left:1px;padding-right:1px}
+  .bottom-nav button small{white-space:nowrap;font-size:clamp(8px,2.5vw,10px)}
+}
