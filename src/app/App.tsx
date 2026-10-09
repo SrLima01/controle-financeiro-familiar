@@ -571,10 +571,6 @@ function Settings({data,family,onChange,onSignOut,theme,onThemeChange,syncStatus
   try{
    const next=importJson(await file.text());
    if(!confirm("ATENÇÃO: importar este backup substituirá os dados financeiros atuais de toda a família e será sincronizado com os outros aparelhos. Faça um backup atual antes de continuar. Deseja continuar?"))return;
-   if(syncStatus!=="synced"){
-    setError("A sincronização mudou durante a importação. Nenhum dado foi importado; sincronize novamente e tente outra vez.");
-    return;
-   }
    await onChange(next); alert("Backup importado e sincronizado com sucesso.");
   }catch(e){setError(e instanceof Error?e.message:"Backup inválido ou falha ao importar/sincronizar.");}
   finally{setBusy(false);}
