@@ -127,7 +127,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
           return;
         }
       }
-      setFamilies(available);
+      setFamilies(available.length === 0 ? [] : available);
     } catch(e) {
       setError(e instanceof Error ? e.message : "Não foi possível carregar seus espaços financeiros.");
     } finally {
