@@ -33,5 +33,6 @@ begin
 end;
 $function$;
 
-revoke all on function public.ensure_personal_space() from public;
+-- Explicitly revoke anon as well as PUBLIC; the function is a privileged API endpoint.
+revoke all on function public.ensure_personal_space() from public, anon;
 grant execute on function public.ensure_personal_space() to authenticated;
