@@ -1,5 +1,5 @@
 /* global self, caches, URL, fetch */
-const CACHE_NAME="controle-familiar-v2";
+const CACHE_NAME="leme-familiar-v3";
 const APP_SHELL=["/","/manifest.webmanifest","/icon.svg","/icon-maskable.svg"];
 
 self.addEventListener("install",event=>{
