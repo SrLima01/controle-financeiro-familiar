@@ -4,9 +4,12 @@ const real=(s:TransactionStatus)=>s==="PAID"||s==="RECEIVED";
 const hasAccount=(as:readonly Account[],id:string)=>as.some(a=>a.id===id);
 const hasCard=(cs:readonly CreditCard[],id:string)=>cs.some(c=>c.id===id);
 const hasId=(items:readonly {id:string}[],id:string)=>items.some(x=>x.id===id);
-export function validateAccountArchive(account:Account,recurringRules:readonly {active:boolean;accountId?:string}[]):void{
+export function validateAccountArchive(account:Account,data:FinancialData,recurringRules:readonly {active:boolean;accountId?:string}[]):void{
  if(!account.active)return;
  if(recurringRules.some(rule=>rule.active&&rule.accountId===account.id)) throw new Error("A conta não pode ser arquivada enquanto houver uma recorrência ativa vinculada.");
+ if(data.cards?.some(card=>card.active&&card.accountId===account.id)) throw new Error("A conta não pode ser arquivada enquanto houver um cartão ativo vinculado a ela.");
+ if(data.transactions.some(tx=>(tx.status==="PENDING"||tx.status==="PLANNED")&&(tx.accountId===account.id||tx.destinationAccountId===account.id))) throw new Error("Resolva ou cancele as movimentações pendentes/planejadas desta conta antes de arquivá-la.");
+ if(calculateAccountBalance(account.id,data)!==0) throw new Error("Transfira ou ajuste o saldo real para zero antes de arquivar a conta.");
 }
 
 export function validateAccountUpdate(previous:Account,next:Account,transactions:readonly Transaction[]):void{
