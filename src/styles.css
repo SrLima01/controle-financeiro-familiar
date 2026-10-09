@@ -373,3 +373,30 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
 .institution-mark svg text{font-family:Arial,sans-serif}
 :root[data-theme="dark"] .cashflow-period-date{background:var(--surface-subtle,#202a3a)}
 @media(max-width:620px){.cashflow-period-panel{padding:14px}.cashflow-period-heading h2{font-size:17px}.cashflow-period-row{gap:8px}.cashflow-period-date{flex-basis:32px;width:32px;height:32px}.cashflow-period-description strong{font-size:12px}.cashflow-period-row>strong{font-size:12px;max-width:105px}}
+
+/* Leme Familiar: identidade visual e abertura animada */
+.brand-mark{background:#fff;color:#0b1f33;border:1px solid #e3e9ef;box-shadow:0 12px 28px #0b1f3312}
+.brand-mark svg{width:42px;height:42px}
+.topbar-brand{display:flex!important;flex-direction:row!important;align-items:center;gap:10px;min-width:0}
+.topbar-brand>img{width:32px;height:36px;object-fit:contain;flex:0 0 auto}
+.topbar-brand>div{min-width:0}
+.topbar-brand strong{font-size:13px;letter-spacing:.055em;color:#0b1f33}
+.topbar-brand span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:48vw}
+.splash-screen{position:fixed;inset:0;z-index:9999;overflow:hidden;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 36%,#fff 0%,#f7fafc 58%,#eaf1f6 100%);color:#0b1f33}
+.splash-brand{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;text-align:center;padding:24px}
+.splash-emblem{width:136px;height:136px;border-radius:36px;display:grid;place-items:center;background:#fff;border:1px solid #e4ebf0;box-shadow:0 20px 55px #0b1f3315;animation:splash-emblem-in .7s cubic-bezier(.2,.75,.25,1) both}
+.splash-boat{width:102px;height:102px;overflow:visible;animation:splash-boat-sail 2.4s ease-in-out .25s both}
+.splash-wordmark{margin-top:27px;font-size:clamp(25px,7vw,32px);font-weight:850;letter-spacing:.12em;opacity:0;animation:splash-wordmark-in .65s ease .45s forwards}
+.splash-wordmark span{font-weight:500;letter-spacing:.08em}
+.splash-brand p{margin:9px 0 0;font-size:13px;letter-spacing:.025em;color:#637387;opacity:0;animation:splash-wordmark-in .6s ease .7s forwards}
+.splash-horizon{position:absolute;left:0;right:0;bottom:13%;height:1px;background:linear-gradient(90deg,transparent,#c6d8e1 20%,#c6d8e1 80%,transparent);opacity:0;animation:splash-horizon-in .7s ease .3s forwards}
+.splash-horizon span{position:absolute;left:-18%;top:-1px;width:18%;height:3px;border-radius:50%;background:#7dd3c7;animation:splash-wave-travel 2.5s ease-in-out .2s both}
+.splash-loading{position:absolute;bottom:7%;width:34px;height:3px;border-radius:5px;background:#dbe5eb;overflow:hidden}
+.splash-loading:after{content:"";display:block;width:45%;height:100%;border-radius:5px;background:#0b1f33;animation:splash-progress 2.35s ease-in-out both}
+@keyframes splash-emblem-in{from{opacity:0;transform:translateY(16px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes splash-boat-sail{0%{transform:translateX(-20px) rotate(-3deg)}35%{transform:translateX(0) rotate(1deg)}70%{transform:translateX(12px) rotate(-1deg)}100%{transform:translateX(0) rotate(0)}}
+@keyframes splash-wordmark-in{to{opacity:1}}
+@keyframes splash-horizon-in{to{opacity:1}}
+@keyframes splash-wave-travel{0%{left:-18%}100%{left:100%}}
+@keyframes splash-progress{0%{transform:translateX(-120%)}100%{transform:translateX(260%)}}
+@media(prefers-reduced-motion:reduce){.splash-emblem,.splash-boat,.splash-wordmark,.splash-brand p,.splash-horizon,.splash-horizon span,.splash-loading:after{animation:none!important;opacity:1!important;transform:none!important;left:0!important}}

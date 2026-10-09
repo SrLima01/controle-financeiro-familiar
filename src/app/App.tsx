@@ -75,6 +75,28 @@ function projectedAccountBalanceUntil(accountId:string,data:EntityCollection,thr
   return balance;
 }
 
+
+function BoatMark({ className = "" }:{className?:string}) {
+  return <svg className={className} viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+    <path d="M48 15V72L19 72Z" fill="currentColor"/>
+    <path d="M53 29 83 70H53Z" fill="#7DD3C7"/>
+    <path d="M12 76Q29 84 47 77T84 77" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
+    <path d="M18 85Q35 92 52 85T82 85" fill="none" stroke="#7DD3C7" strokeWidth="3" strokeLinecap="round"/>
+  </svg>;
+}
+
+function SplashScreen() {
+  return <main className="splash-screen" aria-label="Leme Familiar, iniciando">
+    <div className="splash-brand">
+      <div className="splash-emblem"><BoatMark className="splash-boat"/></div>
+      <div className="splash-wordmark">LEME <span>FAMILIAR</span></div>
+      <p>A direção financeira da sua família.</p>
+    </div>
+    <div className="splash-horizon" aria-hidden="true"><span/></div>
+    <span className="splash-loading" aria-hidden="true"/>
+  </main>;
+}
+
 function AuthScreen({ onAuthenticated }:{onAuthenticated:(user:User)=>void}) {
   const [mode,setMode] = useState<"login"|"signup">("login");
   const [email,setEmail] = useState("");
@@ -91,7 +113,7 @@ function AuthScreen({ onAuthenticated }:{onAuthenticated:(user:User)=>void}) {
     finally { setBusy(false); }
   }
   return <main className="auth-page"><section className="panel auth-panel">
-    <div className="brand-mark" aria-hidden="true"><svg viewBox="0 0 100 100" role="img"><circle cx="50" cy="50" r="39" fill="none" stroke="currentColor" strokeWidth="2.5"/><circle cx="50" cy="50" r="27" fill="none" stroke="currentColor" strokeWidth="1.5" opacity=".65"/><path d="M50 13 60 40 87 50 60 60 50 87 40 60 13 50 40 40Z" fill="currentColor"/><circle cx="50" cy="50" r="5" fill="#0B1F33"/></svg></div><h1>LEME FAMILIAR</h1>
+    <div className="brand-mark" aria-hidden="true"><BoatMark /></div><h1>LEME FAMILIAR</h1>
     <p className="muted">A direção financeira da sua família.</p>
     <form onSubmit={submit} className="form-stack">
       <label>E-mail<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email"/></label>
@@ -1185,7 +1207,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} syncStatus={syncStatus}/> : page==="relatorios" ? <Reports data={data}/> :
     <Dashboard data={data} onChange={persist} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/>;
   return <div className="shell">
-    <header className="topbar"><div><strong>LEME FAMILIAR</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar espaço</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
+    <header className="topbar"><div className="topbar-brand"><img src="/logo-mark.svg" alt="" /><div><strong>LEME FAMILIAR</strong><span>{family.name}</span></div></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar espaço</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
     {legacyData && <section className="panel sync-conflict"><strong>Dados locais de uma versão anterior encontrados</strong><p>Encontramos dados salvos neste aparelho antes da separação por família. Eles não foram misturados automaticamente.</p><p>Se esta família já possui dados financeiros, não importe os dados antigos: a importação substitui o estado financeiro atual da família.</p><div className="form-actions"><button className="secondary compact" onClick={()=>{localStorage.setItem(`legacy-migration-dismissed-${family.id}`,"1");setLegacyData(null);}}>Ignorar</button><button className="primary compact" onClick={()=>{const old=legacyData;if(!old)return;const currentHasData=Object.values(data).some(items=>items.length>0);if(currentHasData){setError("A família atual já possui dados. Por segurança, os dados locais antigos não podem substituir esse estado automaticamente. Exporte um backup e faça a migração somente após confirmar que a família está vazia.");return;}void persist(old).then(()=>{localStorage.setItem(`legacy-migration-completed-${family.id}`,"1");setLegacyData(null)}).catch(e=>setError(e instanceof Error?e.message:"Não foi possível importar os dados antigos."));}}>Importar dados antigos</button></div></section>}
     {error && <div className="global-alert">{error}</div>}{conflict && <section className="panel sync-conflict"><strong>Conflito de sincronização</strong><p>Os dados deste aparelho e os dados online são diferentes. Não fazemos mesclagem automática de informações financeiras.</p><div className="form-actions"><button className="secondary compact" onClick={()=>void keepRemote()}>Usar dados online</button><button className="primary compact" onClick={()=>void keepLocal()}>Manter meus dados</button></div></section>}{loading ? <div className="loading">Carregando dados financeiros…</div> : content}
     <nav className="bottom-nav">{([["dashboard","Início","home","Início"],["contas","Contas","wallet","Contas"],["transacoes","Lanç.","arrows","Lançamentos"],["cartoes","Cartões","card","Cartões"],["relatorios","Relat.","chart","Relatórios"],["mais","Mais","more","Mais ferramentas"]] as const).map(([key,label,icon,accessibleLabel])=><button className={page===key?"active":""} key={key} onClick={()=>{if(key==="mais")setQuickMode("menu");setPage(key)}} aria-current={page===key?"page":undefined} aria-label={accessibleLabel}><NavIcon name={icon}/><small>{label}</small></button>)}</nav>
@@ -1197,7 +1219,13 @@ export default function App() {
   const [family,setFamily]=useState<Family|null>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
+  const [showSplash,setShowSplash]=useState(()=>sessionStorage.getItem("leme-splash-seen")!=="1");
   const authUserIdRef = useRef<string|null>(null);
+  useEffect(()=>{
+    if(!showSplash)return;
+    const timer=window.setTimeout(()=>{sessionStorage.setItem("leme-splash-seen","1");setShowSplash(false)},2800);
+    return ()=>window.clearTimeout(timer);
+  },[showSplash]);
   useEffect(()=>{
     let alive=true;
     getAuthState().then(async s=>{if(!alive)return;authUserIdRef.current=s.user?.id ?? null;setUser(s.user);if(s.user){const savedFamilyId=localStorage.getItem(`selected-family-${s.user.id}`);if(savedFamilyId){try{const families=await listMyFamilies();if(!alive)return;const savedFamily=families.find(f=>f.id===savedFamilyId);if(savedFamily)setFamily(savedFamily);else localStorage.removeItem(`selected-family-${s.user.id}`);}catch{localStorage.removeItem(`selected-family-${s.user.id}`)}}}if(alive)setLoading(false)}).catch(e=>{if(alive){setError(e instanceof Error?e.message:"Supabase não configurado.");setLoading(false)}});
@@ -1212,6 +1240,7 @@ export default function App() {
     });
     return ()=>{alive=false;subscription.data.subscription.unsubscribe()};
   },[]);
+  if(showSplash)return <SplashScreen/>;
   if(loading)return <div className="loading full">Carregando…</div>;
   if(error && !user)return <main className="auth-page"><section className="panel"><h1>Configuração necessária</h1><div className="alert error">{error}</div><p className="muted">Defina as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no ambiente do aplicativo.</p></section></main>;
   if(!user)return <AuthScreen onAuthenticated={setUser}/>;
