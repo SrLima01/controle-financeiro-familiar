@@ -8,7 +8,7 @@ import { IndexedDbFinanceRepository, hasLegacyDatabase, readLegacyLocalData } fr
 import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateAccountArchive, validateAccountUpdate, validateTransaction } from "../domain/transactions/financial-engine";
 import { calculateCardAvailableLimit, calculateCardCreditBalance, calculateCardOutstanding, getCardInvoice, allocateCardPayments, invoiceClosingDate, invoiceDueDateFromClosing, validateCreditCard, validateCreditCardArchive, validateCreditCardUpdate } from "../domain/cards/card-engine";
 import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
-import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
+import { createFamily, ensurePersonalSpace, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
 import { pullFinanceState } from "../infrastructure/supabase/sync";
 import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator";
 import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
@@ -117,9 +117,20 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
     setLoadingFamilies(true);
     setError("");
     try {
-      setFamilies(await listMyFamilies());
+      const available = await listMyFamilies();
+      if (available.length === 0) {
+        const personalId = await ensurePersonalSpace();
+        const refreshed = await listMyFamilies();
+        const personalSpace = refreshed.find(f => f.id === personalId) ?? refreshed[0];
+        if (!personalSpace) {
+          throw new Error("Seu espaço individual foi inicializado, mas não apareceu na lista. Tente carregar novamente.");
+        }
+        onReady(personalSpace);
+        return;
+      }
+      setFamilies(available);
     } catch(e) {
-      setError(e instanceof Error ? e.message : "Não foi possível carregar as famílias.");
+      setError(e instanceof Error ? e.message : "Não foi possível carregar seus espaços financeiros.");
     } finally {
       setLoadingFamilies(false);
     }
@@ -134,7 +145,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
       const id=await createFamily(name.trim());
       const created=(await listMyFamilies()).find(f=>f.id===id);
       if(created) onReady(created);
-      else setError("Família criada, mas não foi possível carregar seus dados.");
+      else setError("Espaço criado, mas não foi possível carregar seus dados.");
     } catch(e) {
       setError(e instanceof Error?e.message:"Não foi possível criar.");
     } finally {setBusy(false);}
@@ -147,7 +158,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
       const id=await joinFamily(code.trim().toUpperCase());
       const found=(await listMyFamilies()).find(f=>f.id===id);
       if(found) onReady(found);
-      else setError("Família vinculada, mas não foi possível carregar seus dados.");
+      else setError("Espaço vinculado, mas não foi possível carregar seus dados.");
     } catch(e) {
       setError(e instanceof Error?e.message:"Não foi possível entrar.");
     } finally {setBusy(false);}
@@ -159,14 +170,14 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
       <strong>{user.email ?? "E-mail não disponível"}</strong>
       <button className="link-button" type="button" onClick={()=>void signOut()}>Sair</button>
     </div>
-    <h1>Escolha sua família</h1>
-    <p className="muted">A família define o conjunto financeiro que será sincronizado entre os aparelhos.</p>
-    {loadingFamilies && <div className="loading">Carregando suas famílias…</div>}
-    {!loadingFamilies && families.length>0 && <div className="family-list">{families.map(f=><button key={f.id} className="family-card" onClick={()=>onReady(f)}><strong>{f.name}</strong><span>Família sincronizada</span></button>)}</div>}
+    <h1>Escolha seu espaço financeiro</h1>
+    <p className="muted">Cada espaço financeiro reúne os dados que serão sincronizados entre os aparelhos.</p>
+    {loadingFamilies && <div className="loading">Carregando seus espaços financeiros…</div>}
+    {!loadingFamilies && families.length>0 && <div className="family-list">{families.map(f=><button key={f.id} className="family-card" onClick={()=>onReady(f)}><strong>{f.name}</strong><span>Espaço sincronizado</span></button>)}</div>}
     <div className="split-line"><span>ou</span></div>
-    <h2>Criar nova família</h2>
+    <h2>Criar outro espaço financeiro</h2>
     <div className="inline-form"><input placeholder="Ex.: Nossa casa" value={name} onChange={e=>setName(e.target.value)} disabled={busy}/><button className="primary" disabled={busy||!name.trim()} onClick={create}>Criar</button></div>
-    <h2>Entrar com código</h2>
+    <h2>Entrar em espaço compartilhado</h2>
     <div className="inline-form"><input placeholder="Código de convite" value={code} onChange={e=>setCode(e.target.value)} disabled={busy}/><button className="secondary" disabled={busy||!code.trim()} onClick={join}>Entrar</button></div>
     {error && <div className="alert error">{error}<button className="link-button" type="button" onClick={()=>void loadFamilies()}>Tentar novamente</button></div>}
   </section></main>;
@@ -678,11 +689,11 @@ function Settings({data,family,onChange,onSignOut,syncStatus}:{data:EntityCollec
 
  return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Aplicativo</span><h1>Configurações</h1></div></div>
  {error&&<div className="global-alert">{error}</div>}
- <section className="panel"><h2>Família</h2><p>Compartilhe este código com outro membro para que ele possa entrar nesta família.</p><div className="family-invite-code"><strong>{family.invite_code}</strong><button className="secondary compact" onClick={async()=>{try{if(!navigator.clipboard)throw new Error("clipboard_unavailable");await navigator.clipboard.writeText(family.invite_code);alert("Código de convite copiado.");}catch{setError(`Não foi possível copiar automaticamente. Código: ${family.invite_code}`);}}}>Copiar código</button></div></section>
+ <section className="panel"><h2>Compartilhamento</h2><p>Compartilhe este código para permitir que outra pessoa participe deste espaço financeiro. O código só deve ser enviado a quem você deseja autorizar.</p><div className="family-invite-code"><strong>{family.invite_code}</strong><button className="secondary compact" onClick={async()=>{try{if(!navigator.clipboard)throw new Error("clipboard_unavailable");await navigator.clipboard.writeText(family.invite_code);alert("Código de convite copiado.");}catch{setError(`Não foi possível copiar automaticamente. Código: ${family.invite_code}`);}}}>Copiar código</button></div></section>
  <section className="panel settings-list">
    <div><strong>Aparência</strong><p>Alterne entre tema claro e escuro pelo botão ao lado do ícone de privacidade na tela inicial. A preferência fica salva neste aparelho.</p></div>
   <div><strong>Backup completo</strong><p>Exporta todas as entidades financeiras em JSON.</p><button className="primary compact" onClick={()=>exportJson(data)}>Exportar JSON</button></div>
-  <div className="danger-zone"><strong>Zerar dados financeiros</strong><p>Apaga os dados financeiros <b>da família inteira</b> e sincroniza a limpeza com os outros aparelhos. Faça um backup antes. O reset fica bloqueado enquanto houver sincronização pendente ou conflito.</p><button className="secondary compact danger-button" onClick={()=>{setResetOpen(true);setResetPhrase("");setError("")}} disabled={busy||syncStatus!=="synced"}>Abrir reset seguro</button>{resetOpen&&<div className="reset-confirm"><strong>Confirmação obrigatória</strong><p>Este é um reset compartilhado. Antes de continuar, confirme que você exportou um backup e que não precisa dos dados atuais.</p><p>Digite <b>ZERAR DADOS</b> para habilitar a exclusão.</p><input value={resetPhrase} onChange={e=>setResetPhrase(e.target.value.toUpperCase())} placeholder="ZERAR DADOS" autoCapitalize="characters"/><div className="form-actions"><button className="secondary compact" onClick={()=>{setResetOpen(false);setResetPhrase("")}}>Cancelar</button><button className="primary compact" disabled={busy||resetPhrase!=="ZERAR DADOS"} onClick={()=>void resetFinancialData()}>Zerar dados financeiros</button></div></div>}</div>
+  <div className="danger-zone"><strong>Zerar dados financeiros</strong><p>Apaga os dados financeiros <b>do espaço financeiro inteiro</b> e sincroniza a limpeza com os outros aparelhos. Faça um backup antes. O reset fica bloqueado enquanto houver sincronização pendente ou conflito.</p><button className="secondary compact danger-button" onClick={()=>{setResetOpen(true);setResetPhrase("");setError("")}} disabled={busy||syncStatus!=="synced"}>Abrir reset seguro</button>{resetOpen&&<div className="reset-confirm"><strong>Confirmação obrigatória</strong><p>Este é um reset compartilhado. Antes de continuar, confirme que você exportou um backup e que não precisa dos dados atuais.</p><p>Digite <b>ZERAR DADOS</b> para habilitar a exclusão.</p><input value={resetPhrase} onChange={e=>setResetPhrase(e.target.value.toUpperCase())} placeholder="ZERAR DADOS" autoCapitalize="characters"/><div className="form-actions"><button className="secondary compact" onClick={()=>{setResetOpen(false);setResetPhrase("")}}>Cancelar</button><button className="primary compact" disabled={busy||resetPhrase!=="ZERAR DADOS"} onClick={()=>void resetFinancialData()}>Zerar dados financeiros</button></div></div>}</div>
   <div><strong>Exportar lançamentos</strong><p>Gera CSV para Excel ou LibreOffice.</p><button className="secondary compact" onClick={()=>exportTransactionsCsv(data)}>Exportar CSV</button></div>
   <div><strong>Importar backup</strong><p>O arquivo é validado antes de substituir os dados locais.</p><input type="file" accept="application/json,.json" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.currentTarget.value=""}}/></div>
   <div><strong>Sessão</strong><p>Encerrar a sessão neste aparelho.</p><button className="secondary compact" onClick={()=>void onSignOut()}>Sair da conta</button></div>
@@ -1174,7 +1185,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} syncStatus={syncStatus}/> : page==="relatorios" ? <Reports data={data}/> :
     <Dashboard data={data} onChange={persist} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/>;
   return <div className="shell">
-    <header className="topbar"><div><strong>LEME FAMILIAR</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar família</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
+    <header className="topbar"><div><strong>LEME FAMILIAR</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar espaço</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
     {legacyData && <section className="panel sync-conflict"><strong>Dados locais de uma versão anterior encontrados</strong><p>Encontramos dados salvos neste aparelho antes da separação por família. Eles não foram misturados automaticamente.</p><p>Se esta família já possui dados financeiros, não importe os dados antigos: a importação substitui o estado financeiro atual da família.</p><div className="form-actions"><button className="secondary compact" onClick={()=>{localStorage.setItem(`legacy-migration-dismissed-${family.id}`,"1");setLegacyData(null);}}>Ignorar</button><button className="primary compact" onClick={()=>{const old=legacyData;if(!old)return;const currentHasData=Object.values(data).some(items=>items.length>0);if(currentHasData){setError("A família atual já possui dados. Por segurança, os dados locais antigos não podem substituir esse estado automaticamente. Exporte um backup e faça a migração somente após confirmar que a família está vazia.");return;}void persist(old).then(()=>{localStorage.setItem(`legacy-migration-completed-${family.id}`,"1");setLegacyData(null)}).catch(e=>setError(e instanceof Error?e.message:"Não foi possível importar os dados antigos."));}}>Importar dados antigos</button></div></section>}
     {error && <div className="global-alert">{error}</div>}{conflict && <section className="panel sync-conflict"><strong>Conflito de sincronização</strong><p>Os dados deste aparelho e os dados online são diferentes. Não fazemos mesclagem automática de informações financeiras.</p><div className="form-actions"><button className="secondary compact" onClick={()=>void keepRemote()}>Usar dados online</button><button className="primary compact" onClick={()=>void keepLocal()}>Manter meus dados</button></div></section>}{loading ? <div className="loading">Carregando dados financeiros…</div> : content}
     <nav className="bottom-nav">{([["dashboard","Início","home","Início"],["contas","Contas","wallet","Contas"],["transacoes","Lanç.","arrows","Lançamentos"],["cartoes","Cartões","card","Cartões"],["relatorios","Relat.","chart","Relatórios"],["mais","Mais","more","Mais ferramentas"]] as const).map(([key,label,icon,accessibleLabel])=><button className={page===key?"active":""} key={key} onClick={()=>{if(key==="mais")setQuickMode("menu");setPage(key)}} aria-current={page===key?"page":undefined} aria-label={accessibleLabel}><NavIcon name={icon}/><small>{label}</small></button>)}</nav>
