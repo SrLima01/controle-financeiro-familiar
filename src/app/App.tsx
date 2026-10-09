@@ -232,7 +232,7 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
   }
   async function archive(a:Account){
     if(!confirm("Arquivar a conta \"" + a.name + "\"? O histórico será preservado."))return;
-    try{validateAccountArchive(a,data.recurringRules)}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");return;}
+    try{validateAccountArchive(a,{accounts:data.accounts,cards:data.cards,transactions:data.transactions},data.recurringRules)}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");return;}
     setBusy(true);setError("");try{await onChange({...data,accounts:data.accounts.map(x=>x.id===a.id?{...x,active:false}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");}finally{setBusy(false);}
   }
   async function reactivate(a:Account){
