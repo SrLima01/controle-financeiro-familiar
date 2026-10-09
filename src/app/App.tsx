@@ -563,12 +563,16 @@ function Reports({data}:{data:EntityCollection}) {
 function Settings({data,family,onChange,onSignOut,theme,onThemeChange,syncStatus}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;theme:"light"|"dark";onThemeChange:(theme:"light"|"dark")=>void;syncStatus:"syncing"|"synced"|"conflict"|"error"}) {
  const [error,setError]=useState(""); const [busy,setBusy]=useState(false); const [resetOpen,setResetOpen]=useState(false); const [resetPhrase,setResetPhrase]=useState("");
  async function importFile(file:File){
+  if(syncStatus!=="synced"){
+   setError("Aguarde a sincronização concluir e resolva qualquer conflito antes de importar um backup.");
+   return;
+  }
   setError("");setBusy(true);
   try{
    const next=importJson(await file.text());
-   if(!confirm("Importar este backup substituirá os dados locais atuais. Deseja continuar?"))return;
-   await onChange(next); alert("Backup importado com sucesso.");
-  }catch(e){setError(e instanceof Error?e.message:"Backup inválido.");}
+   if(!confirm("ATENÇÃO: importar este backup substituirá os dados financeiros atuais de toda a família e será sincronizado com os outros aparelhos. Faça um backup atual antes de continuar. Deseja continuar?"))return;
+   await onChange(next); alert("Backup importado e sincronizado com sucesso.");
+  }catch(e){setError(e instanceof Error?e.message:"Backup inválido ou falha ao importar/sincronizar.");}
   finally{setBusy(false);}
  }
  async function resetFinancialData(){
