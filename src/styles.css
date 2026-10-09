@@ -373,3 +373,10 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
 .institution-mark svg text{font-family:Arial,sans-serif}
 :root[data-theme="dark"] .cashflow-period-date{background:var(--surface-subtle,#202a3a)}
 @media(max-width:620px){.cashflow-period-panel{padding:14px}.cashflow-period-heading h2{font-size:17px}.cashflow-period-row{gap:8px}.cashflow-period-date{flex-basis:32px;width:32px;height:32px}.cashflow-period-description strong{font-size:12px}.cashflow-period-row>strong{font-size:12px;max-width:105px}}
+
+/* Planejado deve se distinguir do realizado sem depender apenas do texto do status. */
+.money-planned{color:#9a6700!important}
+.transaction-row-planned .transaction-value strong{color:#9a6700}
+:root[data-theme="dark"] .money-planned,:root[data-theme="dark"] .transaction-row-planned .transaction-value strong{color:#f2c94c!important}
+.cashflow-period-row .money-planned{color:#9a6700!important}
+:root[data-theme="dark"] .cashflow-period-row .money-planned{color:#f2c94c!important}
