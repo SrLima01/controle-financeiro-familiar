@@ -199,3 +199,19 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @media(min-width:700px){.more-menu-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.more-menu-card{min-height:104px;padding:15px}.more-menu-copy strong{font-size:13px}.more-menu-copy small{font-size:11px}}
 @media(max-width:420px){.more-menu-grid{gap:8px}.more-menu-card{min-height:100px;padding:11px 9px;gap:8px}.more-menu-icon{flex-basis:30px;width:30px;height:30px;font-size:17px}.more-menu-copy strong{font-size:11px}.more-menu-copy small{font-size:10px}.theme-toggle-button{width:34px;height:34px}.sync-dot{padding:5px 7px;font-size:10px}.dashboard-heading-actions{gap:5px}}
 @media(max-width:360px){.more-menu-card{min-height:106px}.account-management-row{flex-direction:column}.account-management-row>.row-actions{width:100%;justify-content:flex-start}.account-management-row>.row-actions>strong{width:auto;margin-right:auto}}
+
+
+/* Atalhos compactos no celular: três colunas e detalhes apenas em telas largas */
+@media(max-width:699px){
+  .more-menu-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .more-menu-card{min-height:88px;display:flex;flex-direction:column;align-items:flex-start;gap:7px;padding:10px 8px}
+  .more-menu-icon{width:29px;height:29px;flex-basis:29px;border-radius:9px;font-size:16px}
+  .more-menu-copy{padding:0}
+  .more-menu-copy strong{font-size:10px;line-height:1.25}
+  .more-menu-copy small,.more-menu-arrow{display:none}
+}
+@media(min-width:700px){
+  .more-menu-card{flex-direction:row;align-items:flex-start}
+  .more-menu-copy small{display:block}
+  .more-menu-arrow{display:block}
+}
