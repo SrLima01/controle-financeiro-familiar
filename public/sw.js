@@ -1,3 +1,4 @@
+/* global self, caches, URL, fetch */
 const CACHE_NAME="controle-familiar-v2";
 const APP_SHELL=["/","/manifest.webmanifest","/icon.svg","/icon-maskable.svg"];
 
