@@ -352,3 +352,24 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
 .cashflow-filter-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 2px 9px}.cashflow-filter-heading span{font-size:12px;color:var(--muted,#667085)}
 :root[data-theme="dark"] .cashflow-summary article{background:var(--surface,#171e2b);border-color:var(--border,#303b4c)}
 @media(max-width:620px){.launch-type-picker{grid-template-columns:1fr;gap:10px}.launch-type-card{padding:14px;grid-template-columns:43px minmax(0,1fr) 16px}.launch-type-icon{width:42px;height:42px}.transaction-workspace{min-height:calc(100dvh - 205px);padding:16px 13px}.workspace-heading h2{font-size:20px}.cashflow-summary{grid-template-columns:1fr;gap:8px}.cashflow-summary article{padding:12px 14px;flex-direction:row;align-items:center;justify-content:space-between}.cashflow-summary article strong{text-align:right}.blocking-modal-backdrop{padding:14px}.blocking-modal{border-radius:21px;padding:23px 19px}}
+
+.cashflow-period-panel{margin:12px 0;padding:16px}
+.cashflow-period-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cashflow-period-heading h2{font-size:18px;margin:0 0 4px}
+.cashflow-period-heading span,.cashflow-period-heading>strong{font-size:12px;color:var(--muted,#667085)}
+.cashflow-period-heading>strong{font-size:15px}
+.cashflow-period-note{font-size:12px;color:var(--muted,#667085);margin:12px 0}
+.cashflow-period-list{margin-top:10px}
+.cashflow-period-row{display:flex;align-items:center;gap:11px;padding:12px 0;border-top:1px solid var(--border,#e7eaf0)}
+.cashflow-period-date{flex:0 0 36px;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--surface-subtle,#f0f3f8);font-weight:800;font-size:13px}
+.cashflow-period-description{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
+.cashflow-period-description strong{font-size:13px;overflow-wrap:anywhere}
+.cashflow-period-description span{font-size:11px;color:var(--muted,#667085)}
+.cashflow-period-row>strong{font-size:13px;text-align:right;overflow-wrap:anywhere}
+.cashflow-future-month{border-top:1px solid var(--border,#e7eaf0)}
+.cashflow-future-month summary{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 2px;cursor:pointer;font-weight:700;text-transform:capitalize}
+.cashflow-future-month summary span:last-child{font-size:12px;color:var(--muted,#667085);font-weight:500;text-align:right}
+.institution-mark svg{display:block;width:30px;height:26px;overflow:visible}
+.institution-mark svg text{font-family:Arial,sans-serif}
+:root[data-theme="dark"] .cashflow-period-date{background:var(--surface-subtle,#202a3a)}
+@media(max-width:620px){.cashflow-period-panel{padding:14px}.cashflow-period-heading h2{font-size:17px}.cashflow-period-row{gap:8px}.cashflow-period-date{flex-basis:32px;width:32px;height:32px}.cashflow-period-description strong{font-size:12px}.cashflow-period-row>strong{font-size:12px;max-width:105px}}
