@@ -28,3 +28,15 @@ export async function listMyFamilies(): Promise<Family[]> {
   if (error) throw error;
   return data as Family[];
 }
+
+
+/**
+ * Creates the default individual workspace for a new account.
+ * If the account already belongs to a workspace, the database returns one
+ * existing membership instead of creating a duplicate.
+ */
+export async function ensurePersonalSpace(): Promise<string> {
+  const { data, error } = await supabase.rpc("ensure_personal_space");
+  if (error) throw error;
+  return data as string;
+}
