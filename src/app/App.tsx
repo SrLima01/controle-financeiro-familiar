@@ -171,7 +171,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
     {error && <div className="alert error">{error}<button className="link-button" type="button" onClick={()=>void loadFamilies()}>Tentar novamente</button></div>}
   </section></main>;
 }
-function Dashboard({data,onQuickAction,hideValues,onToggleHideValues,syncStatus,theme,onThemeChange}:{data:EntityCollection;onQuickAction:(mode:"smart"|"receipt"|"manual")=>void;hideValues:boolean;onToggleHideValues:()=>void;syncStatus:"syncing"|"synced"|"conflict"|"error";theme:"light"|"dark";onThemeChange:(theme:"light"|"dark")=>void}) {
+function Dashboard({data,onChange,onQuickAction,hideValues,onToggleHideValues,syncStatus,theme,onThemeChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;onQuickAction:(mode:"smart"|"receipt"|"manual")=>void;hideValues:boolean;onToggleHideValues:()=>void;syncStatus:"syncing"|"synced"|"conflict"|"error";theme:"light"|"dark";onThemeChange:(theme:"light"|"dark")=>void}) {
   const [planningPeriod,setPlanningPeriod]=useState(currentMonthKey());
   const periodOptions=useMemo(()=>{
     const months=new Set<string>([currentMonthKey()]);
@@ -185,6 +185,27 @@ function Dashboard({data,onQuickAction,hideValues,onToggleHideValues,syncStatus,
   const planned=useMemo(()=>data.transactions
     .filter(t=>(planningPeriod==="ALL"||t.date.startsWith(planningPeriod))&&(t.status==="PENDING"||t.status==="PLANNED"))
     .reduce((sum,t)=>sum+(t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0),[data.transactions,planningPeriod]);
+  const monthKey=currentMonthKey();
+  const realizedIncome=useMemo(()=>data.transactions.filter(t=>t.date.startsWith(monthKey)&&t.type==="INCOME"&&t.status==="RECEIVED").reduce((sum,t)=>sum+t.amountCents,0),[data.transactions,monthKey]);
+  const realizedExpense=useMemo(()=>data.transactions.filter(t=>t.date.startsWith(monthKey)&&t.type==="EXPENSE"&&t.status==="PAID").reduce((sum,t)=>sum+t.amountCents,0),[data.transactions,monthKey]);
+  const monthNet=realizedIncome-realizedExpense;
+  const today=todayFinancialDate();
+  const dueHorizon=new Date(); dueHorizon.setDate(dueHorizon.getDate()+7);
+  const dueHorizonDate=`${dueHorizon.getFullYear()}-${String(dueHorizon.getMonth()+1).padStart(2,"0")}-${String(dueHorizon.getDate()).padStart(2,"0")}`;
+  const dueTransactions=useMemo(()=>data.transactions.filter(t=>(t.type==="EXPENSE"||t.type==="INCOME")&&(t.status==="PENDING"||t.status==="PLANNED")&&(t.scheduledDate??t.date)<=dueHorizonDate).sort((a,b)=>(a.scheduledDate??a.date).localeCompare(b.scheduledDate??b.date)).slice(0,8),[data.transactions,dueHorizonDate]);
+  const categorySpend=useMemo(()=>{
+    const totals=new Map<string,number>();
+    for(const t of data.transactions) if(t.type==="EXPENSE"&&t.status==="PAID"&&t.date.startsWith(monthKey)&&t.categoryId) totals.set(t.categoryId,(totals.get(t.categoryId)??0)+t.amountCents);
+    return [...totals.entries()].map(([id,cents])=>({id,cents,name:data.categories.find(c=>c.id===id)?.name??"Sem categoria"})).sort((a,b)=>b.cents-a.cents).slice(0,5);
+  },[data.transactions,data.categories,monthKey]);
+  const maxCategorySpend=Math.max(1,...categorySpend.map(c=>c.cents));
+  const [actionError,setActionError]=useState("");
+  async function settleDue(t:Transaction){
+    setActionError("");
+    try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:t.type==="INCOME"?"RECEIVED" as const:"PAID" as const}:x)});}
+    catch(e){setActionError(e instanceof Error?e.message:"Não foi possível confirmar a movimentação.");}
+  }
+  function dateLabel(value:string){return new Date(value+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});}
 
   return <div className="page-content">
     <div className="page-heading"><div><span className="eyebrow">{planningPeriod==="ALL"?"Planejamento completo":monthLabel(planningPeriod)}</span><h1>Visão geral</h1></div><div className="dashboard-heading-actions"><button className="value-visibility-button" type="button" onClick={onToggleHideValues} aria-label={hideValues?"Mostrar valores financeiros":"Ocultar valores financeiros"} title={hideValues?"Mostrar valores":"Ocultar valores"}><svg className="visibility-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg><span>{hideValues?"Mostrar":"Ocultar"}</span></button><button className="theme-toggle-button" type="button" onClick={()=>onThemeChange(theme==="dark"?"light":"dark")} aria-label={theme==="dark"?"Ativar modo claro":"Ativar modo escuro"} title={theme==="dark"?"Ativar modo claro":"Ativar modo escuro"}><span aria-hidden="true">{theme==="dark"?"☀":"☾"}</span></button><span className={`sync-dot sync-${syncStatus}`}>{syncStatus==="syncing"?"Sincronizando…":syncStatus==="conflict"?"Conflito":syncStatus==="error"?"Erro de sincronização":"Sincronizado"}</span></div></div>
@@ -203,10 +224,20 @@ function Dashboard({data,onQuickAction,hideValues,onToggleHideValues,syncStatus,
         </select>
       </label>
     </section>
-    <div className="metric-grid">
+    <div className="metric-grid dashboard-strategic-metrics">
       <article className="metric"><span>Saldo projetado</span><strong>{displayMoney(projected,hideValues)}</strong><small>{planningPeriod==="ALL"?"Considera todo o planejamento já gerado.":`Projeção até o fim de ${monthLabel(planningPeriod)}.`}</small></article>
-      <article className="metric"><span>Planejado no período</span><strong>{displayMoney(planned,hideValues)}</strong><small>Somente pendentes e planejados do período selecionado.</small></article>
+      <article className="metric"><span>Planejado no período</span><strong className={planned<0?"money-negative":planned>0?"money-positive":""}>{displayMoney(planned,hideValues)}</strong><small>Pendentes e planejados, sem duplicar compras no cartão.</small></article>
+      <article className="metric"><span>Entradas recebidas · mês</span><strong className="money-positive">{displayMoney(realizedIncome,hideValues)}</strong><small>Receitas já confirmadas como recebidas.</small></article>
+      <article className="metric"><span>Saídas pagas · mês</span><strong className="money-negative">{displayMoney(realizedExpense,hideValues)}</strong><small>Despesas pagas; pagamentos de fatura não duplicam gastos.</small></article>
+      <article className="metric"><span>Resultado realizado · mês</span><strong className={monthNet<0?"money-negative":monthNet>0?"money-positive":""}>{displayMoney(monthNet,hideValues)}</strong><small>Entradas recebidas menos despesas pagas.</small></article>
     </div>
+    <section className="panel dashboard-due-panel"><div className="section-title"><div><h2>Vencimentos e recebimentos</h2><span>Atrasados e movimentações previstas para os próximos 7 dias.</span></div><span>{dueTransactions.length} pendentes</span></div>
+      {actionError&&<div className="global-alert">{actionError}</div>}
+      {dueTransactions.length===0?<Empty text="Nenhum pagamento ou recebimento pendente nos próximos dias."/>:<div className="due-list">{dueTransactions.map(t=>{const dueDate=t.scheduledDate??t.date;const overdue=dueDate<today;const category=data.categories.find(c=>c.id===t.categoryId);return <div className="due-row" key={t.id}><span className={`due-kind ${t.type==="INCOME"?"due-income":"due-expense"}`} aria-hidden="true">{t.type==="INCOME"?"↙":"↗"}</span><div className="due-copy"><strong>{t.description|| (t.type==="INCOME"?"Recebimento":"Pagamento")}</strong><small>{overdue?"Atrasado":dueDate===today?"Vence hoje":`Vence ${dateLabel(dueDate)}`}{category? ` · ${category.name}`:""} · {t.status==="PLANNED"?"Planejado":"Pendente"}</small></div><strong className={t.type==="INCOME"?"money-positive":"money-negative"}>{displayMoney(t.amountCents,hideValues)}</strong><button className="settle-icon-button" title={t.type==="INCOME"?"Confirmar recebimento":"Confirmar pagamento"} aria-label={t.type==="INCOME"?"Marcar como recebido":"Marcar como pago"} onClick={()=>void settleDue(t)}>✓</button></div>})}</div>}
+    </section>
+    <section className="panel dashboard-category-panel"><div className="section-title"><div><h2>Despesas por categoria</h2><span>Despesas pagas neste mês, da maior para a menor.</span></div></div>
+      {categorySpend.length===0?<Empty text="Ainda não há despesas pagas categorizadas neste mês."/>:<div className="dashboard-category-list">{categorySpend.map(c=><div className="dashboard-category-row" key={c.id}><div><strong>{c.name}</strong><strong>{displayMoney(c.cents,hideValues)}</strong></div><div className="report-bar-track"><div className="report-bar-fill" style={{width:`${c.cents/maxCategorySpend*100}%`}}/></div></div>)}</div>}
+    </section>
     <section className="panel"><div className="section-title"><h2>Contas</h2><span>{data.accounts.filter(a=>a.active).length} ativas</span></div>
       {data.accounts.filter(a=>a.active).length===0 ? <Empty text="Nenhuma conta cadastrada ainda."/> : <div className="account-list">{data.accounts.filter(a=>a.active).map(a=><div className="account-row dashboard-account-row" key={a.id}><div className="account-identity"><InstitutionMark institution={a.institution} name={a.name}/><span className="account-name-group"><strong>{a.name}</strong><small>{accountTypeLabel(a.type)}</small></span></div><strong>{displayMoney(projectedAccountBalanceUntil(a.id,data,throughDate),hideValues)}</strong></div>)}</div>}
     </section>
@@ -314,13 +345,29 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [parcelado,setParcelado]=useState(false);
  const [creatingCategory,setCreatingCategory]=useState(false);
  const [filter,setFilter]=useState<"ALL"|"INCOME"|"EXPENSE"|"TRANSFER"|"CARD_PAYMENT">("ALL");
+ const [searchText,setSearchText]=useState("");
+ const [filterCategoryId,setFilterCategoryId]=useState("");
+ const [filterAccountId,setFilterAccountId]=useState("");
+ const [filterStatus,setFilterStatus]=useState<"ALL"|TransactionStatus>("ALL");
+ const [fromDate,setFromDate]=useState("");
+ const [toDate,setToDate]=useState("");
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const [pendingRecurringEdit,setPendingRecurringEdit]=useState<{previous:Transaction;next:Transaction}|null>(null);
  const [view,setView]=useState<"new"|"history">("new");
  const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
- const visible=data.transactions.filter(t=>filter==="ALL"||t.type===filter).sort((a,b)=>b.date.localeCompare(a.date));
+ const visible=data.transactions.filter(t=>{
+   if(filter!=="ALL"&&t.type!==filter)return false;
+   if(filterStatus!=="ALL"&&t.status!==filterStatus)return false;
+   if(filterCategoryId&&t.categoryId!==filterCategoryId)return false;
+   if(filterAccountId){const cardAccount=t.creditCardId?data.cards.find(c=>c.id===t.creditCardId)?.accountId:undefined;if(t.accountId!==filterAccountId&&t.destinationAccountId!==filterAccountId&&cardAccount!==filterAccountId)return false;}
+   if(fromDate&&t.date<fromDate)return false;
+   if(toDate&&t.date>toDate)return false;
+   const query=searchText.trim().toLocaleLowerCase("pt-BR");
+   if(query){const category=data.categories.find(c=>c.id===t.categoryId)?.name??"";const account=data.accounts.find(a=>a.id===t.accountId)?.name??"";const destination=data.accounts.find(a=>a.id===t.destinationAccountId)?.name??"";if(![t.description,category,account,destination].some(value=>value.toLocaleLowerCase("pt-BR").includes(query)))return false;}
+   return true;
+ }).sort((a,b)=>b.date.localeCompare(a.date));
 
  function reset(){setPendingRecurringEdit(null);setEditing(null);setLaunchMode("unique");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
  function edit(t:Transaction){
@@ -386,14 +433,24 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    {view==="new"&&<div className="subnav launch-mode-tabs"><button className={launchMode==="unique"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("unique");setError("")}}>Lançamento único</button><button className={launchMode==="recurring"?"active":""} onClick={()=>{if(editing)return;setLaunchMode("recurring");setError("")}}>Lançamento recorrente</button></div>}
    {pendingRecurringEdit&&<section className="panel recurring-edit-choice"><div className="section-title"><div><span className="eyebrow">Ocorrência recorrente</span><h2>Como aplicar esta alteração?</h2><p className="form-note">A data agendada desta ocorrência será preservada. Você pode alterar apenas esta ocorrência ou aplicar a mudança a ela e às próximas.</p></div></div><div className="form-actions"><button className="primary" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange(applyRecurringOccurrenceEdit(data,pendingRecurringEdit.previous,pendingRecurringEdit.next,"ONLY_THIS"));reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível ajustar a ocorrência.")}finally{setBusy(false)}}}>Somente este lançamento</button><button className="secondary" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange(applyRecurringOccurrenceEdit(data,pendingRecurringEdit.previous,pendingRecurringEdit.next,"THIS_AND_FOLLOWING"));reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível aplicar aos próximos.")}finally{setBusy(false)}}}>Este e os próximos</button><button className="secondary" disabled={busy} onClick={()=>setPendingRecurringEdit(null)}>Cancelar</button></div></section>}
    {view==="history"&&<><div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
+   <section className="panel transaction-search-panel"><label className="transaction-search-field"><span aria-hidden="true">⌕</span><input type="search" value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Pesquisar por nome ou descrição…" aria-label="Pesquisar lançamentos"/></label>
+     <div className="transaction-filter-grid">
+       <label>Categoria<select value={filterCategoryId} onChange={e=>setFilterCategoryId(e.target.value)}><option value="">Todas as categorias</option>{data.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+       <label>Conta<select value={filterAccountId} onChange={e=>setFilterAccountId(e.target.value)}><option value="">Todas as contas</option>{data.accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+       <label>Situação<select value={filterStatus} onChange={e=>setFilterStatus(e.target.value as "ALL"|TransactionStatus)}><option value="ALL">Todas as situações</option><option value="PAID">Pago</option><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option><option value="CANCELLED">Cancelado</option></select></label>
+       <label>De<input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/></label>
+       <label>Até<input type="date" value={toDate} min={fromDate||undefined} onChange={e=>setToDate(e.target.value)}/></label>
+       <button className="secondary compact clear-transaction-filters" onClick={()=>{setSearchText("");setFilterCategoryId("");setFilterAccountId("");setFilterStatus("ALL");setFromDate("");setToDate("");setFilter("ALL")}}>Limpar filtros</button>
+     </div>
+   </section>
    <section className="panel transaction-list">{visible.length===0?<Empty text="Nenhum lançamento encontrado."/>:visible.map(t=>{
      const group=t.installmentGroupId?data.installmentGroups.find(g=>g.id===t.installmentGroupId):undefined;
      const n=group?getInstallmentNumber(group,t.id):undefined;
      const recurringRule=data.recurringRules.find(rule=>rule.transactionIds.includes(t.id));
-     return <div className={recurringRule?"transaction-row transaction-row-recurring":"transaction-row"} key={t.id}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date}{t.scheduledDate&&t.scheduledDate!==t.date?` · agendada ${t.scheduledDate}`:""} · {labelType(t)} · {t.status}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
-       <div className="transaction-value"><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":"+"}{money(t.amountCents)}</strong><div className="row-actions">
+     return <div className={`transaction-row ${recurringRule?"transaction-row-recurring":""} ${t.status==="CANCELLED"?"transaction-row-cancelled":""}`} key={t.id}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date}{t.scheduledDate&&t.scheduledDate!==t.date?` · agendada ${t.scheduledDate}`:""} · {labelType(t)} · {t.status==="PAID"?"Pago":t.status==="RECEIVED"?"Recebido":t.status==="PENDING"?"Pendente":t.status==="PLANNED"?"Planejado":"Cancelado"}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
+       <div className={`transaction-value ${t.status==="CANCELLED"?"money-cancelled":t.type==="INCOME"?"money-positive":t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"money-negative":"money-neutral"}`}><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":t.type==="INCOME"?"+":""}{money(t.amountCents)}</strong><div className="row-actions">
          {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>} </> :
-           <>{<button className="link-button" onClick={()=>edit(t)}>Editar</button>}{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
+           <>{(t.status==="PENDING"||t.status==="PLANNED")&&(t.type==="INCOME"||t.type==="EXPENSE")&&<button className="link-button settle-history-button" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:t.type==="INCOME"?"RECEIVED" as const:"PAID" as const}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível confirmar.");}finally{setBusy(false)}}}>✓ {t.type==="INCOME"?"Recebido":"Pago"}</button>}<button className="link-button" onClick={()=>edit(t)}>Editar</button>{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
        </div></div></div>
    })}</section></>}
    {view==="new"&&launchMode==="recurring"&&!editing&&<Recurring data={data} onChange={onChange} embedded onCreated={()=>setLaunchMode("unique")} onCancel={()=>setLaunchMode("unique")}/>}
@@ -1080,12 +1137,12 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
       setError(error instanceof Error?error.message:"Não foi possível manter os dados deste aparelho.");
     }
   }
-  const content = page==="dashboard" ? <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/> :
+  const content = page==="dashboard" ? <Dashboard data={data} onChange={persist} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/> :
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
     page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
     page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} syncStatus={syncStatus}/> : page==="relatorios" ? <Reports data={data}/> :
-    <Dashboard data={data} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/>;
+    <Dashboard data={data} onChange={persist} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/>;
   return <div className="shell">
     <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar família</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
     {legacyData && <section className="panel sync-conflict"><strong>Dados locais de uma versão anterior encontrados</strong><p>Encontramos dados salvos neste aparelho antes da separação por família. Eles não foram misturados automaticamente.</p><p>Se esta família já possui dados financeiros, não importe os dados antigos: a importação substitui o estado financeiro atual da família.</p><div className="form-actions"><button className="secondary compact" onClick={()=>{localStorage.setItem(`legacy-migration-dismissed-${family.id}`,"1");setLegacyData(null);}}>Ignorar</button><button className="primary compact" onClick={()=>{const old=legacyData;if(!old)return;const currentHasData=Object.values(data).some(items=>items.length>0);if(currentHasData){setError("A família atual já possui dados. Por segurança, os dados locais antigos não podem substituir esse estado automaticamente. Exporte um backup e faça a migração somente após confirmar que a família está vazia.");return;}void persist(old).then(()=>{localStorage.setItem(`legacy-migration-completed-${family.id}`,"1");setLegacyData(null)}).catch(e=>setError(e instanceof Error?e.message:"Não foi possível importar os dados antigos."));}}>Importar dados antigos</button></div></section>}
@@ -1102,7 +1159,7 @@ export default function App() {
   const authUserIdRef = useRef<string|null>(null);
   useEffect(()=>{
     let alive=true;
-    getAuthState().then(s=>{if(alive){authUserIdRef.current=s.user?.id ?? null;setUser(s.user);setLoading(false)}}).catch(e=>{if(alive){setError(e instanceof Error?e.message:"Supabase não configurado.");setLoading(false)}});
+    getAuthState().then(async s=>{if(!alive)return;authUserIdRef.current=s.user?.id ?? null;setUser(s.user);if(s.user){const savedFamilyId=localStorage.getItem(`selected-family-${s.user.id}`);if(savedFamilyId){try{const families=await listMyFamilies();if(!alive)return;const savedFamily=families.find(f=>f.id===savedFamilyId);if(savedFamily)setFamily(savedFamily);else localStorage.removeItem(`selected-family-${s.user.id}`);}catch{localStorage.removeItem(`selected-family-${s.user.id}`)}}}if(alive)setLoading(false)}).catch(e=>{if(alive){setError(e instanceof Error?e.message:"Supabase não configurado.");setLoading(false)}});
     const subscription=onAuthStateChange(s=>{
       if(!alive)return;
       const nextUserId=s.user?.id ?? null;
@@ -1117,6 +1174,6 @@ export default function App() {
   if(loading)return <div className="loading full">Carregando…</div>;
   if(error && !user)return <main className="auth-page"><section className="panel"><h1>Configuração necessária</h1><div className="alert error">{error}</div><p className="muted">Defina as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no ambiente do aplicativo.</p></section></main>;
   if(!user)return <AuthScreen onAuthenticated={setUser}/>;
-  if(!family)return <FamilyScreen user={user} onReady={setFamily}/>;
-  return <AppShell user={user} family={family} onSwitchFamily={()=>setFamily(null)} onSignOut={async()=>{await signOut();setFamily(null);setUser(null)}}/>;
+  if(!family)return <FamilyScreen user={user} onReady={selected=>{localStorage.setItem(`selected-family-${user.id}`,selected.id);setFamily(selected)}}/>;
+  return <AppShell user={user} family={family} onSwitchFamily={()=>{localStorage.removeItem(`selected-family-${user.id}`);setFamily(null)}} onSignOut={async()=>{localStorage.removeItem(`selected-family-${user.id}`);await signOut();setFamily(null);setUser(null)}}/>;
 }
