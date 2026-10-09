@@ -122,12 +122,13 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
         const personalId = await ensurePersonalSpace();
         const refreshed = await listMyFamilies();
         const personalSpace = refreshed.find(f => f.id === personalId) ?? refreshed[0];
-        if (personalSpace) {
-          onReady(personalSpace);
-          return;
+        if (!personalSpace) {
+          throw new Error("Seu espaço individual foi inicializado, mas não apareceu na lista. Tente carregar novamente.");
         }
+        onReady(personalSpace);
+        return;
       }
-      setFamilies(available.length === 0 ? [] : available);
+      setFamilies(available);
     } catch(e) {
       setError(e instanceof Error ? e.message : "Não foi possível carregar seus espaços financeiros.");
     } finally {
