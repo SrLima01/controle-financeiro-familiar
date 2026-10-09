@@ -139,3 +139,63 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .reset-confirm input{width:100%;margin-top:6px;padding:12px;border:1px solid #d8dde6;border-radius:12px;background:#fff}
 :root[data-theme="dark"] .danger-zone{border-top-color:var(--border)}
 :root[data-theme="dark"] .reset-confirm{background:#291b1f;border-color:#61343a}
+
+
+/* Refinamento visual mobile: ações claras, área Mais organizada e identificação de contas */
+.theme-toggle-button{width:36px;height:36px;display:inline-grid;place-items:center;border:1px solid var(--border,#dfe4ec);border-radius:10px;background:var(--surface,#fff);color:var(--text,#172033);font-size:19px;line-height:1}
+.theme-toggle-button:hover{border-color:#8192c9;background:var(--surface-2,#f4f6fb)}
+.theme-toggle-button:focus-visible{outline:3px solid rgba(65,90,155,.28);outline-offset:2px}
+.nav-icon{display:block;width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.bottom-nav button{gap:5px;flex-basis:0;transition:color .16s ease,background .16s ease}
+.bottom-nav button.active{color:#3556a8}
+.bottom-nav button.active .nav-icon{stroke-width:2.2}
+.bottom-nav button small{font-size:10px;letter-spacing:.01em}
+.more-page{max-width:980px}
+.more-heading{margin-bottom:18px}
+.more-heading h1{margin:4px 0}
+.more-intro{margin:7px 0 0;color:var(--muted,#697386);font-size:13px;line-height:1.45}
+.more-menu-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.more-menu-card{position:relative;display:flex;align-items:flex-start;gap:10px;min-width:0;min-height:94px;padding:13px 12px;border:1px solid var(--border,#e2e7ef);border-radius:16px;background:var(--surface,#fff);color:var(--text,#172033);text-align:left;box-shadow:0 2px 8px rgba(20,30,40,.035);transition:border-color .16s ease,transform .16s ease,box-shadow .16s ease}
+.more-menu-card:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(20,30,40,.07)}
+.more-menu-card.active{border-color:#6b82ca;box-shadow:0 0 0 2px rgba(75,102,180,.12);background:var(--surface-2,#f6f8ff)}
+.more-menu-icon{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:11px;background:#edf1fb;color:#344f9a;font-size:19px;font-weight:700}
+.more-menu-copy{display:flex;flex-direction:column;gap:5px;min-width:0;padding-top:1px}
+.more-menu-copy strong{font-size:12px;line-height:1.3;overflow-wrap:anywhere}
+.more-menu-copy small{font-size:10px;line-height:1.35;color:var(--muted,#697386)}
+.more-menu-arrow{position:absolute;right:8px;bottom:7px;color:var(--muted,#697386);font-size:18px;line-height:1}
+.more-selected-content{min-width:0}
+.more-selected-heading{margin:0 0 10px;padding:0 2px}
+.more-selected-heading h2{margin:3px 0 0;font-size:19px}
+.more-selected-content>.page-content{width:100%;max-width:none;padding:0}
+.account-identity{display:flex!important;flex-direction:row!important;align-items:center;gap:11px;min-width:0}
+.institution-mark{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:13px;background:#e9edf5;color:#344054;font-size:13px;font-weight:850;letter-spacing:-.04em;text-transform:lowercase;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+.institution-none{background:#e8edf5;color:#475569;text-transform:uppercase}
+.institution-itau{background:#004990;color:#ff9f1c}
+.institution-bradesco{background:#cc092f;color:#fff}
+.institution-bb{background:#fff000;color:#003da5}
+.institution-caixa{background:#0066b3;color:#fff}
+.institution-santander{background:#ec0000;color:#fff;text-transform:uppercase}
+.institution-nubank{background:#820ad1;color:#fff}
+.institution-inter{background:#ff7a00;color:#fff}
+.institution-c6{background:#202020;color:#fff;text-transform:uppercase}
+.institution-sicredi{background:#3b8c3f;color:#fff}
+.institution-sicoob{background:#007f4e;color:#fff}
+.institution-mercadopago{background:#009ee3;color:#fff;text-transform:uppercase}
+.institution-picpay{background:#21c25e;color:#083b20;text-transform:uppercase}
+.institution-other{background:#e8edf5;color:#475569}
+.account-name-group{display:flex!important;flex-direction:column!important;gap:4px!important;min-width:0}
+.account-name-group strong{overflow-wrap:anywhere}
+.account-name-group small{font-size:11px;color:var(--muted,#697386);line-height:1.35}
+.account-management-row{gap:10px}
+.account-management-row>.row-actions{flex-wrap:wrap;justify-content:flex-end}
+.account-management-row>.row-actions>strong{white-space:nowrap}
+.dashboard-account-row>strong{white-space:nowrap}
+:root[data-theme="dark"] .more-menu-card{background:var(--surface);color:var(--text);border-color:var(--border)}
+:root[data-theme="dark"] .more-menu-card.active{background:#202b42;border-color:#6b82ca}
+:root[data-theme="dark"] .more-menu-icon{background:#28344d;color:#c7d2fe}
+:root[data-theme="dark"] .more-menu-copy small{color:var(--muted)}
+:root[data-theme="dark"] .theme-toggle-button{background:var(--surface);color:var(--text);border-color:var(--border)}
+:root[data-theme="dark"] .institution-none,:root[data-theme="dark"] .institution-other{background:#303b4d;color:#e2e8f0}
+@media(min-width:700px){.more-menu-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.more-menu-card{min-height:104px;padding:15px}.more-menu-copy strong{font-size:13px}.more-menu-copy small{font-size:11px}}
+@media(max-width:420px){.more-menu-grid{gap:8px}.more-menu-card{min-height:100px;padding:11px 9px;gap:8px}.more-menu-icon{flex-basis:30px;width:30px;height:30px;font-size:17px}.more-menu-copy strong{font-size:11px}.more-menu-copy small{font-size:10px}.theme-toggle-button{width:34px;height:34px}.sync-dot{padding:5px 7px;font-size:10px}.dashboard-heading-actions{gap:5px}}
+@media(max-width:360px){.more-menu-card{min-height:106px}.account-management-row{flex-direction:column}.account-management-row>.row-actions{width:100%;justify-content:flex-start}.account-management-row>.row-actions>strong{width:auto;margin-right:auto}}
