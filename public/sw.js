@@ -1,6 +1,6 @@
 /* global self, caches, URL, fetch */
-const CACHE_NAME="leme-familiar-v3";
-const APP_SHELL=["/","/manifest.webmanifest","/icon.svg","/icon-maskable.svg"];
+const CACHE_NAME="leme-familiar-v4";
+const APP_SHELL=["/","/manifest.webmanifest","/icon.svg","/icon-maskable.svg","/logo-mark.svg","/logo.svg"];
 
 self.addEventListener("install",event=>{
   event.waitUntil(
