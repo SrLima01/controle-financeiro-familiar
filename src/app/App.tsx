@@ -103,12 +103,13 @@ function AuthScreen({ onAuthenticated }:{onAuthenticated:(user:User)=>void}) {
   const [password,setPassword] = useState("");
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
+  const [notice,setNotice] = useState("");
   async function submit(e:FormEvent) {
-    e.preventDefault(); setBusy(true); setError("");
+    e.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
       const result = mode==="login" ? await signInWithEmail(email,password) : await signUpWithEmail(email,password);
       if (result.session && result.user) onAuthenticated(result.user);
-      else setError("Cadastro realizado. Confirme o e-mail antes de entrar.");
+      else setNotice("Cadastro realizado. Confira sua caixa de entrada e confirme o e-mail antes de entrar.");
     } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível concluir."); }
     finally { setBusy(false); }
   }
@@ -118,10 +119,11 @@ function AuthScreen({ onAuthenticated }:{onAuthenticated:(user:User)=>void}) {
     <form onSubmit={submit} className="form-stack">
       <label>E-mail<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email"/></label>
       <label>Senha<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} autoComplete={mode==="login"?"current-password":"new-password"}/></label>
-      {error && <div className="alert error">{error}</div>}
+      {error && <div className="alert error" role="alert">{error}</div>}
+      {notice && <div className="alert success" role="status">{notice}</div>}
       <button className="primary" disabled={busy}>{busy ? "Aguarde…" : mode==="login" ? "Entrar" : "Criar conta"}</button>
     </form>
-    <button className="link-button" onClick={()=>{setMode(mode==="login"?"signup":"login");setError("")}}>
+    <button className="link-button" onClick={()=>{setMode(mode==="login"?"signup":"login");setError("");setNotice("")}}>
       {mode==="login" ? "Ainda não tenho conta" : "Já tenho uma conta"}
     </button>
   </section></main>;
