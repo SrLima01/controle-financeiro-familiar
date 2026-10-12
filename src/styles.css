@@ -268,6 +268,10 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
 .more-detail-content>.page-content>.panel{width:100%;max-width:100%;box-sizing:border-box}
 :root[data-theme="dark"] .more-back-button{background:var(--surface);color:var(--text);border-color:var(--border)}
 @media(max-width:420px){
+  .share-app-button{width:38px;min-width:38px;padding:9px!important;gap:0}
+  .share-app-button span{display:none}
+  .topbar-actions{gap:4px}
+  .switch-space-button{font-size:10px!important}
   .topbar{padding-left:12px;padding-right:12px}
   .topbar-actions .secondary{padding:9px 8px;font-size:11px}
   .topbar-actions .icon-button{padding:7px 5px}
@@ -377,6 +381,9 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
 /* Leme Familiar: identidade visual e abertura animada */
 .brand-mark{background:#fff;color:#0b1f33;border:1px solid #e3e9ef;box-shadow:0 12px 28px #0b1f3312}
 .brand-mark svg{width:42px;height:42px}
+.topbar-actions{display:flex;align-items:center;gap:8px;flex-direction:row!important}
+.share-app-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}
+.share-app-button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 .topbar-brand{display:flex!important;flex-direction:row!important;align-items:center;gap:10px;min-width:0}
 .topbar-brand>img{width:32px;height:36px;object-fit:contain;flex:0 0 auto}
 .topbar-brand>div{min-width:0}

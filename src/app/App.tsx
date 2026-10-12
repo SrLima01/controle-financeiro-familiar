@@ -1024,6 +1024,18 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   const [theme,setTheme]=useState<"light"|"dark">(()=>localStorage.getItem("finance-theme")==="dark"?"dark":"light");
   useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem("finance-theme",theme);},[theme]);
   function changeTheme(next:"light"|"dark"){setTheme(next);}
+  async function shareAppLink(){
+    const shareData={title:"Leme Familiar",text:"Organize as finanças da sua família com o Leme Familiar.",url:window.location.origin};
+    try{
+      if(navigator.share){await navigator.share(shareData);return;}
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(shareData.url);window.alert("Link do Leme Familiar copiado. Agora é só enviar para quem você quiser.");return;}
+      window.prompt("Copie o link do Leme Familiar:",shareData.url);
+    }catch(error){
+      if(error instanceof DOMException&&error.name==="AbortError")return;
+      try{await navigator.clipboard.writeText(shareData.url);window.alert("Link do Leme Familiar copiado. Agora é só enviar para quem você quiser.");}
+      catch{window.prompt("Copie o link do Leme Familiar:",shareData.url);}
+    }
+  }
   const [quickMode,setQuickMode]=useState<"menu"|"smart"|"receipt">("menu");
   function openQuickAction(mode:"smart"|"receipt"|"manual"){
     if(mode==="manual"){setPage("transacoes");return}
@@ -1209,7 +1221,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} syncStatus={syncStatus}/> : page==="relatorios" ? <Reports data={data}/> :
     <Dashboard data={data} onChange={persist} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/>;
   return <div className="shell">
-    <header className="topbar"><div className="topbar-brand"><img src="/logo-mark.svg" alt="" /><div><strong>LEME FAMILIAR</strong><span>{family.name}</span></div></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar espaço</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
+    <header className="topbar"><div className="topbar-brand"><img src="/logo-mark.svg" alt="" /><div><strong>LEME FAMILIAR</strong><span>{family.name}</span></div></div><div className="topbar-actions"><button className="secondary compact share-app-button" onClick={()=>void shareAppLink()} aria-label="Compartilhar link do Leme Familiar" title="Compartilhar link do Leme Familiar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.4M8.7 13.3l6.6 4.4"/></svg><span>Compartilhar</span></button><button className="secondary compact switch-space-button" onClick={onSwitchFamily}>Trocar espaço</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
     {legacyData && <section className="panel sync-conflict"><strong>Dados locais de uma versão anterior encontrados</strong><p>Encontramos dados salvos neste aparelho antes da separação por família. Eles não foram misturados automaticamente.</p><p>Se esta família já possui dados financeiros, não importe os dados antigos: a importação substitui o estado financeiro atual da família.</p><div className="form-actions"><button className="secondary compact" onClick={()=>{localStorage.setItem(`legacy-migration-dismissed-${family.id}`,"1");setLegacyData(null);}}>Ignorar</button><button className="primary compact" onClick={()=>{const old=legacyData;if(!old)return;const currentHasData=Object.values(data).some(items=>items.length>0);if(currentHasData){setError("A família atual já possui dados. Por segurança, os dados locais antigos não podem substituir esse estado automaticamente. Exporte um backup e faça a migração somente após confirmar que a família está vazia.");return;}void persist(old).then(()=>{localStorage.setItem(`legacy-migration-completed-${family.id}`,"1");setLegacyData(null)}).catch(e=>setError(e instanceof Error?e.message:"Não foi possível importar os dados antigos."));}}>Importar dados antigos</button></div></section>}
     {error && <div className="global-alert">{error}</div>}{conflict && <section className="panel sync-conflict"><strong>Conflito de sincronização</strong><p>Os dados deste aparelho e os dados online são diferentes. Não fazemos mesclagem automática de informações financeiras.</p><div className="form-actions"><button className="secondary compact" onClick={()=>void keepRemote()}>Usar dados online</button><button className="primary compact" onClick={()=>void keepLocal()}>Manter meus dados</button></div></section>}{loading ? <div className="loading">Carregando dados financeiros…</div> : content}
     <nav className="bottom-nav">{([["dashboard","Início","home","Início"],["contas","Contas","wallet","Contas"],["transacoes","Lanç.","arrows","Lançamentos"],["cartoes","Cartões","card","Cartões"],["relatorios","Relat.","chart","Relatórios"],["mais","Mais","more","Mais ferramentas"]] as const).map(([key,label,icon,accessibleLabel])=><button className={page===key?"active":""} key={key} onClick={()=>{if(key==="mais")setQuickMode("menu");setPage(key)}} aria-current={page===key?"page":undefined} aria-label={accessibleLabel}><NavIcon name={icon}/><small>{label}</small></button>)}</nav>
