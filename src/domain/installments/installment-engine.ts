@@ -91,5 +91,5 @@ export function deleteInstallmentGroup(data:EntityCollection,groupId:string):Ent
  const group=data.installmentGroups.find(item=>item.id===groupId);
  if(!group)throw new Error("Grupo de parcelas não encontrado.");
  const ids=new Set(group.transactionIds);
- return {...data,transactions:data.transactions.filter(tx=>!ids.has(tx.id)),installmentGroups:data.installmentGroups.filter(item=>item.id!==groupId)};
+ return {...data,transactions:data.transactions.filter(tx=>tx.installmentGroupId!==groupId&&!ids.has(tx.id)),installmentGroups:data.installmentGroups.filter(item=>item.id!==groupId)};
 }
