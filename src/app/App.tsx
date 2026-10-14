@@ -407,7 +407,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [toDate,setToDate]=useState("");
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const [pendingRecurringEdit,setPendingRecurringEdit]=useState<{previous:Transaction;next:Transaction}|null>(null);
- const [view,setView]=useState<"new"|"cashflow">("new");
+ const [view,setView]=useState<"new"|"cashflow">("cashflow");
  const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
