@@ -537,3 +537,18 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
  .icon-action-button{width:36px;min-width:36px;height:36px;min-height:36px}
 }
 :root[data-theme="dark"] .transaction-row .icon-action-button.danger{background:color-mix(in srgb,var(--danger,#c55) 15%,var(--surface,#171e2b))}
+
+
+/* Resumo mensal destacado acima da lista de lançamentos */
+.cashflow-summary-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 2px 8px}
+.cashflow-summary-title strong{font-size:16px;font-weight:800;color:var(--text,#1f2937)}
+.cashflow-summary-title span{font-size:13px;color:var(--muted,#667085);text-transform:capitalize}
+.cashflow-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cashflow-summary article{min-height:84px}
+@media(max-width:620px){
+ .cashflow-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .cashflow-summary article{min-height:78px;padding:11px;flex-direction:column;align-items:flex-start;gap:7px}
+ .cashflow-summary article strong{font-size:17px}
+ .cashflow-summary-title{margin-top:14px}
+}
+:root[data-theme="dark"] .cashflow-summary-title strong{color:var(--text,#f1f4fa)}
