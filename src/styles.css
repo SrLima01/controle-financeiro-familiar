@@ -811,3 +811,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--focus)!important;outl
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
 }
+
+
+/* Ajustes de identidade visual: Mercado Pago e conta sem instituição */
+.institution-mercadopago{background:#fff!important;color:#009ee3!important;box-shadow:inset 0 0 0 1px #bde7f8!important}
+.institution-none{background:#e3f7ed!important;color:#087f5b!important;text-transform:none}
+.institution-none svg text{font-family:Arial,sans-serif}
