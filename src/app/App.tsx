@@ -412,6 +412,8 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
 }
 
 const INSTITUTIONS=[{id:"none",name:"Dinheiro / outra"},{id:"itau",name:"Itaú"},{id:"bradesco",name:"Bradesco"},{id:"bb",name:"Banco do Brasil"},{id:"caixa",name:"Caixa"},{id:"santander",name:"Santander"},{id:"nubank",name:"Nubank"},{id:"inter",name:"Inter"},{id:"c6",name:"C6 Bank"},{id:"sicredi",name:"Sicredi"},{id:"sicoob",name:"Sicoob"},{id:"mercadopago",name:"Mercado Pago"},{id:"picpay",name:"PicPay"},{id:"other",name:"Outro banco"}] as const;
+// SVGs de marcas bancárias servidos pelo projeto react-bancos; mantemos fallback local caso a imagem falhe.
+const REAL_LOGO_SLUGS:Record<string,string>={itau:"itau",bradesco:"bradesco",bb:"bancodobrasil",caixa:"caixa",santander:"santander",nubank:"nubank",inter:"inter",c6:"c6bank",sicredi:"sicredi",sicoob:"sicoob",mercadopago:"mercadopago",picpay:"picpay"};
 function accountTypeLabel(type:AccountType){return ({CHECKING:"Conta corrente",SAVINGS:"Poupança",DIGITAL:"Conta digital",CASH:"Dinheiro",INVESTMENT:"Investimento"})[type]}
 function InstitutionMark({institution,name}:{institution?:string;name:string}){
  const normalizedName=name.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLocaleLowerCase("pt-BR");
@@ -432,6 +434,7 @@ function InstitutionMark({institution,name}:{institution?:string;name:string}){
  const meta=INSTITUTIONS.find(item=>item.id===preferredId)??INSTITUTIONS[0];
  const id=meta.id;
  return <span className={`institution-mark institution-${id}`} role="img" aria-label={meta.name} title={meta.name}>
+   {REAL_LOGO_SLUGS[id]&&<img className="institution-real-logo" src={`https://henriquezolini.github.io/react-bancos/icons/${REAL_LOGO_SLUGS[id]}.svg`} alt="" aria-hidden="true" onError={event=>{event.currentTarget.style.display="none"}}/>}
    {id==="bb"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M3 16 13 4h9L12 16l10 12h-9z" fill="#003da5"/><path d="M37 16 27 4h-9l10 12-10 12h9z" fill="#ffdf00"/></svg>
    :id==="caixa"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M3 8h12l8 8-8 8H3l8-8z" fill="#ff8a00"/><path d="M37 8H25l-8 8 8 8h12l-8-8z" fill="#fff"/><path d="M15 4h10l-5 7zM15 28h10l-5-7z" fill="#00a0df"/></svg>
    :id==="santander"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M21 2c-1 6 7 8 7 14 0 3-2 5-5 5 1-4-1-7-5-10-1 4-7 7-7 12 0 4 4 6 9 6 9 0 14-5 14-12 0-7-8-10-13-15z" fill="currentColor"/></svg>
@@ -442,7 +445,7 @@ function InstitutionMark({institution,name}:{institution?:string;name:string}){
    :id==="nubank"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="19" fontWeight="900" fill="currentColor">nu</text></svg>
    :id==="inter"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="21" textAnchor="middle" fontSize="12" fontWeight="900" fill="currentColor">inter</text></svg>
    :id==="c6"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="17" fontWeight="900" fill="currentColor">C6</text></svg>
-   :id==="mercadopago"?<svg viewBox="0 0 40 32" aria-hidden="true"><ellipse cx="20" cy="16" rx="17" ry="12" fill="#fff" stroke="#bde7f8" strokeWidth="1.5"/><path d="M7 13 12 10l6 4 3-2 7 4-4 5-5-2-3 2-6-4-3-4Z" fill="#009ee3" stroke="#007eb5" strokeWidth="1.1" strokeLinejoin="round"/><path d="m12 10 3-2 5 3 3-1 6 4-3 3-6-3-3 2-5-3Z" fill="#fff" stroke="#009ee3" strokeWidth="1.3" strokeLinejoin="round"/><path d="m16 15 4 3m1-2 3 2m-8-1 3 3" fill="none" stroke="#007eb5" strokeWidth="1.2" strokeLinecap="round"/></svg>
+   :id==="mercadopago"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="16" fontWeight="900" fill="currentColor">MP</text></svg>
    :id==="picpay"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="23" textAnchor="middle" fontSize="22" fontWeight="900" fill="currentColor">P</text></svg>
    :id==="none"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="23" textAnchor="middle" fontSize="21" fontWeight="900" fill="currentColor">R$</text></svg>
    :<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M7 9h26v14H7z" fill="none" stroke="currentColor" strokeWidth="2.5"/><path d="M7 14h26" stroke="currentColor" strokeWidth="2.5"/></svg>}
