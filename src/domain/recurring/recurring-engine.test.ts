@@ -5,6 +5,7 @@ const accounts=[{id:"a",name:"Conta",type:"CHECKING" as const,openingBalanceCent
 const base={description:"Aluguel",frequency:"MONTHLY" as const,startDate:"2026-01-31",amountCents:100000,type:"EXPENSE" as const,status:"PLANNED" as const,accountId:"a",active:true};
 const empty=(rule:ReturnType<typeof createRecurringRule>):EntityCollection=>({people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]});
 describe("recurring engine",()=>{
+ it("rejects a recurring rule whose status does not match its type",()=>{expect(()=>createRecurringRule({...base,type:"INCOME",status:"PAID"})).toThrow("O status da recorrência não corresponde ao tipo de movimentação.");});
  it("rejects a zero-value recurring rule",()=>{expect(()=>createRecurringRule({...base,amountCents:0})).toThrow("maior que zero");});
  it("advances dates according to frequency",()=>{expect(nextRecurringDate("2026-01-31","MONTHLY")).toBe("2026-02-28");expect(nextRecurringDate("2026-01-05","BIWEEKLY")).toBe("2026-01-19");});
  it("preserves the original day anchor across short months",()=>{const rule=createRecurringRule(base);const result=generateRecurringTransactions(empty(rule),rule,"2026-05-31");expect(result.generated.map(t=>t.date)).toEqual(["2026-01-31","2026-02-28","2026-03-31","2026-04-30","2026-05-31"]);expect(result.generated.every(t=>t.scheduledDate===t.date)).toBe(true);});
