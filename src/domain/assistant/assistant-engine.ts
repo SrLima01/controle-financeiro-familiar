@@ -3,7 +3,7 @@ import type { EntityCollection } from "../../infrastructure/persistence/reposito
 export type Insight={kind:"positive"|"attention"|"info";title:string;detail:string};
 export type AssistantAnalysis={insights:Insight[]};
 
-const realized=(t:{status:string})=>t.status==="PAID"||t.status==="RECEIVED";
+const realized=(t:{type:string;status:string})=>t.type==="INCOME"?t.status==="RECEIVED":t.status==="PAID";
 export function analyzeFinances(data:EntityCollection,month:string):AssistantAnalysis{
  const insights:Insight[]=[];
  const expenses=data.transactions.filter(t=>t.type==="EXPENSE"&&realized(t)&&t.status!=="CANCELLED"&&t.date.slice(0,7)===month);
