@@ -36,3 +36,10 @@ export function generateRecurringTransactions(data:EntityCollection,rule:Recurri
  if(!generated.length)return {data,generated};const nextRule={...rule,transactionIds:[...rule.transactionIds,...generated.map(t=>t.id)]};return {data:{...data,transactions:[...data.transactions,...generated],recurringRules:data.recurringRules.map(r=>r.id===rule.id?nextRule:r)},generated};}
 export function ensureRecurringHorizon(data:EntityCollection,throughDate:string):EntityCollection{assertFinancialDate(throughDate);let current=data;for(const rule of data.recurringRules){if(!rule.active)continue;const result=generateRecurringTransactions(current,rule,throughDate);if(result.generated.length)current=result.data;}return current;}
 export function deactivateRecurringRule(data:EntityCollection,ruleId:string,todayDate:string=currentFinancialDate()):EntityCollection{assertFinancialDate(todayDate);const rule=data.recurringRules.find(r=>r.id===ruleId);if(!rule)throw new Error("Regra recorrente não encontrada.");const transactionIds=new Set(rule.transactionIds);return {...data,recurringRules:data.recurringRules.map(r=>r.id===ruleId?{...r,active:false}:r),transactions:data.transactions.map(tx=>transactionIds.has(tx.id)&&getRecurringScheduledDate(tx)>todayDate&&(tx.status==="PENDING"||tx.status==="PLANNED")?{...tx,status:"CANCELLED" as const}:tx)};}
+
+export function deleteRecurringRuleAndOccurrences(data:EntityCollection,ruleId:string):EntityCollection{
+ const rule=data.recurringRules.find(item=>item.id===ruleId);
+ if(!rule)throw new Error("Regra recorrente não encontrada.");
+ const ids=new Set(rule.transactionIds);
+ return {...data,recurringRules:data.recurringRules.filter(item=>item.id!==ruleId),transactions:data.transactions.filter(tx=>!ids.has(tx.id))};
+}
