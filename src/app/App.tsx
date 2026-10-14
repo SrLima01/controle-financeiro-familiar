@@ -13,8 +13,8 @@ import { pullFinanceState } from "../infrastructure/supabase/sync";
 import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator";
 import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
 import { assertCents } from "../domain/money/cents";
-import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
-import { applyRecurringOccurrenceEdit, applyRecurringRuleToFutureTransactions, createRecurringRule, deactivateRecurringRule, generateRecurringTransactions, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
+import { buildInstallmentSet, cancelInstallments, deleteInstallmentGroup, getInstallmentNumber } from "../domain/installments/installment-engine";
+import { applyRecurringOccurrenceEdit, applyRecurringRuleToFutureTransactions, createRecurringRule, deactivateRecurringRule, deleteRecurringRuleAndOccurrences, generateRecurringTransactions, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
 import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
 import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
 import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
@@ -499,6 +499,14 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível apagar o lançamento.");}
    finally{setBusy(false)}
  }
+ async function removeInstallmentGroup(t:Transaction){
+   const groupId=t.installmentGroupId;if(!groupId)return;
+   const group=data.installmentGroups.find(item=>item.id===groupId);if(!group){setError("Grupo de parcelas não encontrado.");return;}
+   const realizedCount=data.transactions.filter(tx=>group.transactionIds.includes(tx.id)&&(tx.status==="PAID"||tx.status==="RECEIVED")).length;
+   if(!confirm(`Excluir definitivamente o parcelamento "${group.description}" e suas ${group.transactionIds.length} parcelas? Isso também apagará ${realizedCount} lançamento(s) realizado(s) e alterará saldos, faturas e relatórios. Use apenas para testes ou registros incorretos.`))return;
+   setBusy(true);setError("");
+   try{await onChange(deleteInstallmentGroup(data,groupId));if(editing&&group.transactionIds.includes(editing.id))reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível excluir o parcelamento.");}finally{setBusy(false)}
+ }
  async function cancelGroup(t:Transaction,mode:"ONE"|"THIS_AND_FOLLOWING"){
    const groupId=t.installmentGroupId;if(!groupId)return;
    const label=mode==="ONE"?"esta parcela":"esta e todas as seguintes";
@@ -539,7 +547,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
      const recurringRule=data.recurringRules.find(rule=>rule.transactionIds.includes(t.id));
      return <div className={`transaction-row ${recurringRule?"transaction-row-recurring":""} ${t.status==="CANCELLED"?"transaction-row-cancelled":""} transaction-row-interactive`} key={t.id} role="button" tabIndex={0} aria-label={`Abrir lançamento ${t.description||labelType(t)} para editar`} onClick={e=>{if((e.target as HTMLElement).closest("button"))return;edit(t)}} onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&!(e.target as HTMLElement).closest("button")){e.preventDefault();edit(t)}}}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date}{t.scheduledDate&&t.scheduledDate!==t.date?` · agendada ${t.scheduledDate}`:""} · {labelType(t)} · {t.status==="PAID"?"Pago":t.status==="RECEIVED"?"Recebido":t.status==="PENDING"?"Pendente":t.status==="PLANNED"?"Planejado":"Cancelado"}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
        <div className={`transaction-value ${t.status==="CANCELLED"?"money-cancelled":t.type==="INCOME"?"money-positive":t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"money-negative":"money-neutral"}`}><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":t.type==="INCOME"?"+":""}{money(t.amountCents)}</strong><div className="row-actions">
-         {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>} </> :
+         {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>}<button className="link-button danger" disabled={busy} onClick={()=>void removeInstallmentGroup(t)}>Excluir parcelamento</button> </> :
            <>{(t.status==="PENDING"||t.status==="PLANNED")&&(t.type==="INCOME"||t.type==="EXPENSE")&&<button className="link-button settle-history-button" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:t.type==="INCOME"?"RECEIVED" as const:"PAID" as const}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível confirmar.");}finally{setBusy(false)}}}>✓ {t.type==="INCOME"?"Recebido":"Pago"}</button>}{t.status!=="CANCELLED"&&<button className="link-button" disabled={busy} onClick={()=>edit(t)}>Editar</button>}{!group&&!recurringRule&&<button className="link-button danger" disabled={busy} onClick={()=>void removeTransaction(t)}>Apagar</button>}{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
        </div></div></div>
    })}</section></>}
@@ -616,10 +624,16 @@ function Recurring({data,onChange,embedded=false,onCreated,onCancel}:{data:Entit
    setBusy(true);setError("");
    try{await onChange(deactivateRecurringRule(data,rule.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível desativar.")}finally{setBusy(false)}
  }
+ async function removeRule(rule:RecurringRule){
+   const realizedCount=data.transactions.filter(tx=>rule.transactionIds.includes(tx.id)&&(tx.status==="PAID"||tx.status==="RECEIVED")).length;
+   if(!confirm(`Excluir definitivamente a recorrência "${rule.description}" e todos os ${rule.transactionIds.length} lançamentos gerados? Isso também apagará ${realizedCount} lançamento(s) realizado(s) e alterará saldos, faturas e relatórios. Use apenas para testes ou registros incorretos.`))return;
+   setBusy(true);setError("");
+   try{await onChange(deleteRecurringRuleAndOccurrences(data,rule.id));if(editing?.id===rule.id)reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível excluir a recorrência.");}finally{setBusy(false)}
+ }
  const frequencyLabel=(f:RecurringFrequency)=>({WEEKLY:"Semanal",BIWEEKLY:"Quinzenal",MONTHLY:"Mensal",BIMONTHLY:"Bimestral",QUARTERLY:"Trimestral",SEMIANNUAL:"Semestral",ANNUAL:"Anual"}[f]);
  return <div className="page-content">
    {!embedded&&<><div className="page-heading"><div><span className="eyebrow">Automação</span><h1>Recorrências</h1></div><button className="primary compact" onClick={reset}>+ Nova recorrência</button></div>
-   <section className="panel transaction-list">{data.recurringRules.filter(r=>r.active).length===0?<Empty text="Nenhuma recorrência ativa."/>:data.recurringRules.filter(r=>r.active).map(r=><div className="transaction-row" key={r.id}><div><strong>{r.description}</strong><span>{frequencyLabel(r.frequency)} · desde {r.startDate} · {money(r.amountCents)} · {r.transactionIds.length} lançamentos gerados</span></div><div className="row-actions"><button className="link-button" onClick={()=>edit(r)}>Editar regra</button><button className="link-button" disabled={busy} onClick={()=>void generate(r)}>Gerar próximos</button><button className="link-button danger" disabled={busy} onClick={()=>void deactivate(r)}>Desativar</button></div></div>)}</section></>}
+   <section className="panel transaction-list">{data.recurringRules.filter(r=>r.active).length===0?<Empty text="Nenhuma recorrência ativa."/>:data.recurringRules.filter(r=>r.active).map(r=><div className="transaction-row" key={r.id}><div><strong>{r.description}</strong><span>{frequencyLabel(r.frequency)} · desde {r.startDate} · {money(r.amountCents)} · {r.transactionIds.length} lançamentos gerados</span></div><div className="row-actions"><button className="link-button" onClick={()=>edit(r)}>Editar regra</button><button className="link-button" disabled={busy} onClick={()=>void generate(r)}>Gerar próximos</button><button className="link-button danger" disabled={busy} onClick={()=>void deactivate(r)}>Desativar</button><button className="link-button danger" disabled={busy} onClick={()=>void removeRule(r)}>Excluir tudo</button></div></div>)}</section></>}
    {error&&<div className="global-alert">{error}</div>}
    <section className="panel form-panel"><h2>{editing?"Editar recorrência":embedded?"Lançamento recorrente":"Nova recorrência"}</h2><div className="form-grid">
     <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as "INCOME"|"EXPENSE";setType(v);setCategoryId("");if(v==="INCOME")setCreditCardId("")}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option></select></label>
