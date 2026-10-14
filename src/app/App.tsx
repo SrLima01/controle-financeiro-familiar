@@ -64,6 +64,8 @@ function projectedAccountBalanceUntil(accountId:string,data:EntityCollection,thr
   let balance=account.openingBalanceCents;
   for(const tx of data.transactions) {
     if(tx.status==="CANCELLED" || (throughDate && tx.date>throughDate)) continue;
+    const validStatus=tx.status==="PENDING"||tx.status==="PLANNED"||(tx.type==="INCOME"?tx.status==="RECEIVED":tx.status==="PAID");
+    if(!validStatus) continue;
     if(tx.type==="INCOME" && tx.accountId===accountId) balance+=tx.amountCents;
     if(tx.type==="EXPENSE" && tx.accountId===accountId) balance-=tx.amountCents;
     if(tx.type==="TRANSFER") {
@@ -610,7 +612,7 @@ function Recurring({data,onChange,embedded=false,onCreated,onCancel}:{data:Entit
    try{const horizon=new Date();horizon.setMonth(horizon.getMonth()+12);const through=`${horizon.getFullYear()}-${String(horizon.getMonth()+1).padStart(2,"0")}-${String(horizon.getDate()).padStart(2,"0")}`;const result=generateRecurringTransactions(data,rule,through);await onChange(result.data)}catch(e){setError(e instanceof Error?e.message:"Não foi possível gerar os lançamentos.");}finally{setBusy(false)}
  }
  async function deactivate(rule:RecurringRule){
-   if(!confirm("Desativar esta recorrência? Os lançamentos já gerados serão preservados."))return;
+   if(!confirm("Desativar esta recorrência? O histórico será preservado e as ocorrências futuras ainda pendentes/planejadas serão canceladas."))return;
    setBusy(true);setError("");
    try{await onChange(deactivateRecurringRule(data,rule.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível desativar.")}finally{setBusy(false)}
  }
