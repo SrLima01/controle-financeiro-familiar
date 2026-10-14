@@ -442,9 +442,9 @@ function InstitutionMark({institution,name}:{institution?:string;name:string}){
    :id==="nubank"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="19" fontWeight="900" fill="currentColor">nu</text></svg>
    :id==="inter"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="21" textAnchor="middle" fontSize="12" fontWeight="900" fill="currentColor">inter</text></svg>
    :id==="c6"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="17" fontWeight="900" fill="currentColor">C6</text></svg>
-   :id==="mercadopago"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M6 12c4-6 8-6 14 0 6-6 10-6 14 0l-5 8H11z" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 20l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>
+   :id==="mercadopago"?<svg viewBox="0 0 40 32" aria-hidden="true"><ellipse cx="20" cy="16" rx="17" ry="12" fill="#fff" stroke="#bde7f8" strokeWidth="1.5"/><path d="M7 13 12 10l6 4 3-2 7 4-4 5-5-2-3 2-6-4-3-4Z" fill="#009ee3" stroke="#007eb5" strokeWidth="1.1" strokeLinejoin="round"/><path d="m12 10 3-2 5 3 3-1 6 4-3 3-6-3-3 2-5-3Z" fill="#fff" stroke="#009ee3" strokeWidth="1.3" strokeLinejoin="round"/><path d="m16 15 4 3m1-2 3 2m-8-1 3 3" fill="none" stroke="#007eb5" strokeWidth="1.2" strokeLinecap="round"/></svg>
    :id==="picpay"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="23" textAnchor="middle" fontSize="22" fontWeight="900" fill="currentColor">P</text></svg>
-   :id==="none"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M20 3 35 16 20 29 5 16z" fill="none" stroke="currentColor" strokeWidth="3"/><circle cx="20" cy="16" r="4" fill="currentColor"/></svg>
+   :id==="none"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="23" textAnchor="middle" fontSize="21" fontWeight="900" fill="currentColor">R$</text></svg>
    :<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M7 9h26v14H7z" fill="none" stroke="currentColor" strokeWidth="2.5"/><path d="M7 14h26" stroke="currentColor" strokeWidth="2.5"/></svg>}
  </span>;
 }
