@@ -12,7 +12,7 @@ export type RecurringFrequency="WEEKLY"|"BIWEEKLY"|"MONTHLY"|"BIMONTHLY"|"QUARTE
 export type RecurringRule={
   id:Id; description:string; frequency:RecurringFrequency; startDate:string; endDate?:string; amountCents:number;
   type:"INCOME"|"EXPENSE"; status:"PENDING"|"PAID"|"RECEIVED"|"PLANNED"; categoryId?:Id; accountId?:Id; creditCardId?:Id;
-  personId?:Id; transactionIds:Id[]; active:boolean;
+  personId?:Id; transactionIds:Id[]; excludedDates?:string[]; active:boolean;
 };
 export type PotMovementType="DEPOSIT"|"WITHDRAWAL";
 export type Pot={id:Id;name:string;targetCents:number;active:boolean};
