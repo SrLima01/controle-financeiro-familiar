@@ -6,7 +6,7 @@ export type BudgetStatus="NORMAL"|"ATTENTION"|"EXCEEDED";
 
 export function getBudgetSpent(data:EntityCollection,budget:Budget):number{
   return data.transactions
-    .filter(t=>t.type==="EXPENSE"&&(t.status==="PAID"||t.status==="RECEIVED")&&t.categoryId===budget.categoryId&&t.date.slice(0,7)===budget.month)
+    .filter(t=>t.type==="EXPENSE"&&t.status==="PAID"&&t.categoryId===budget.categoryId&&t.date.slice(0,7)===budget.month)
     .reduce((sum,t)=>sum+t.amountCents,0);
 }
 export function getBudgetPercentage(spent:number,limit:number):number{
