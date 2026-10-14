@@ -1179,8 +1179,9 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   }
   const [quickMode,setQuickMode]=useState<"menu"|"smart"|"receipt">("menu");
    const [transactionInitialView,setTransactionInitialView]=useState<"new"|"cashflow">("cashflow");
+  const [transactionLaunchRequest,setTransactionLaunchRequest]=useState(0);
   function openQuickAction(mode:"smart"|"receipt"|"manual"){
-    if(mode==="manual"){setTransactionInitialView("new");setPage("transacoes");return}
+    if(mode==="manual"){setTransactionInitialView("new");setTransactionLaunchRequest(n=>n+1);setPage("transacoes");return}
     setQuickMode(mode);setPage("mais")
   }
   const [data,setData]=useState<EntityCollection>(emptyData);
@@ -1358,7 +1359,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   }
   const content = page==="dashboard" ? <Dashboard data={data} onChange={persist} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/> :
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
-    page==="transacoes" ? <Transactions key={transactionInitialView} data={data} onChange={persist} initialView={transactionInitialView}/> :
+    page==="transacoes" ? <Transactions key={`${transactionInitialView}-${transactionLaunchRequest}`} data={data} onChange={persist} initialView={transactionInitialView}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
     page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} syncStatus={syncStatus}/> : page==="relatorios" ? <Reports data={data}/> :
     <Dashboard data={data} onChange={persist} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/>;
