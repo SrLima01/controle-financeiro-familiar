@@ -157,6 +157,7 @@ export function validateBackup(input: unknown): FinanceBackup {
     ) throw new Error("Invalid recurring rule " + rule.id);
     const compatibleRuleStatus=rule.status==="PENDING"||rule.status==="PLANNED"||(rule.type==="INCOME"?rule.status==="RECEIVED":rule.status==="PAID");
     if(!compatibleRuleStatus)throw new Error("Recurring rule has a status incompatible with its type: "+rule.id);
+    if(rule.excludedDates!==undefined){if(!Array.isArray(rule.excludedDates)||rule.excludedDates.some(date=>typeof date!=="string"||!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(date)))throw new Error("Invalid excluded dates for recurring rule "+rule.id);if(new Set(rule.excludedDates).size!==rule.excludedDates.length)throw new Error("Duplicate excluded date in recurring rule "+rule.id);}
     if (rule.accountId && !accountIds.has(rule.accountId)) throw new Error("Recurring rule references an unknown account");
     if (rule.creditCardId && !cardIds.has(rule.creditCardId)) throw new Error("Recurring rule references an unknown card");
     if (rule.categoryId && !categoryIds.has(rule.categoryId)) throw new Error("Recurring rule references an unknown category");
