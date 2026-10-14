@@ -30,12 +30,21 @@ export function applyRecurringRuleToFutureTransactions(data:EntityCollection,pre
  return {...data,transactions};
 }
 export function generateRecurringTransactions(data:EntityCollection,rule:RecurringRule,throughDate:string,todayDate:string=currentFinancialDate()):{data:EntityCollection;generated:Transaction[]}{assertFinancialDate(throughDate);assertFinancialDate(todayDate);if(!rule.active)return {data,generated:[]};
- const existingScheduledDates=new Set(rule.transactionIds.map(id=>data.transactions.find(t=>t.id===id)).filter((tx):tx is Transaction=>Boolean(tx)).map(getRecurringScheduledDate));
+ const existingScheduledDates=new Set([...(rule.excludedDates??[]),...rule.transactionIds.map(id=>data.transactions.find(t=>t.id===id)).filter((tx):tx is Transaction=>Boolean(tx)).map(getRecurringScheduledDate)]);
  const generated:Transaction[]=[];let occurrenceIndex=0;let date=recurringDateFromStart(rule.startDate,rule.frequency,occurrenceIndex);
  while(date<=throughDate){if((!rule.endDate||date<=rule.endDate)&&!existingScheduledDates.has(date)){const occurrenceStatus:Transaction["status"]=date>todayDate&&(rule.status==="PAID"||rule.status==="RECEIVED")?"PLANNED":rule.status;const tx:Transaction={id:crypto.randomUUID(),date,type:rule.type,status:occurrenceStatus,amountCents:rule.amountCents,description:rule.description,scheduledDate:date,...(rule.categoryId?{categoryId:rule.categoryId}:{}),...(rule.accountId?{accountId:rule.accountId}:{}),...(rule.creditCardId?{creditCardId:rule.creditCardId}:{}),...(rule.personId?{personId:rule.personId}:{})};validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:[...data.transactions,...generated]});generated.push(tx);}occurrenceIndex+=1;date=recurringDateFromStart(rule.startDate,rule.frequency,occurrenceIndex);}
  if(!generated.length)return {data,generated};const nextRule={...rule,transactionIds:[...rule.transactionIds,...generated.map(t=>t.id)]};return {data:{...data,transactions:[...data.transactions,...generated],recurringRules:data.recurringRules.map(r=>r.id===rule.id?nextRule:r)},generated};}
 export function ensureRecurringHorizon(data:EntityCollection,throughDate:string):EntityCollection{assertFinancialDate(throughDate);let current=data;for(const rule of data.recurringRules){if(!rule.active)continue;const result=generateRecurringTransactions(current,rule,throughDate);if(result.generated.length)current=result.data;}return current;}
 export function deactivateRecurringRule(data:EntityCollection,ruleId:string,todayDate:string=currentFinancialDate()):EntityCollection{assertFinancialDate(todayDate);const rule=data.recurringRules.find(r=>r.id===ruleId);if(!rule)throw new Error("Regra recorrente não encontrada.");const transactionIds=new Set(rule.transactionIds);return {...data,recurringRules:data.recurringRules.map(r=>r.id===ruleId?{...r,active:false}:r),transactions:data.transactions.map(tx=>transactionIds.has(tx.id)&&getRecurringScheduledDate(tx)>todayDate&&!tx.recurringOverride&&(tx.status==="PENDING"||tx.status==="PLANNED")?{...tx,status:"CANCELLED" as const}:tx)};}
+
+export function deleteRecurringOccurrence(data:EntityCollection,transactionId:string):EntityCollection{
+ const rule=data.recurringRules.find(item=>item.transactionIds.includes(transactionId));
+ if(!rule)throw new Error("Ocorrência recorrente não encontrada.");
+ const tx=data.transactions.find(item=>item.id===transactionId);
+ if(!tx)throw new Error("Lançamento da recorrência não encontrado.");
+ const scheduledDate=getRecurringScheduledDate(tx);
+ return {...data,transactions:data.transactions.filter(item=>item.id!==transactionId),recurringRules:data.recurringRules.map(item=>item.id===rule.id?{...item,transactionIds:item.transactionIds.filter(id=>id!==transactionId),excludedDates:[...new Set([...(item.excludedDates??[]),scheduledDate])]}:item)};
+}
 
 export function deleteRecurringRuleAndOccurrences(data:EntityCollection,ruleId:string):EntityCollection{
  const rule=data.recurringRules.find(item=>item.id===ruleId);
