@@ -7,6 +7,7 @@ const base:EntityCollection={
 };
 
 describe("report engine",()=>{
+ it("ignores status incompatible with the transaction type in reports",()=>{const data={...base,transactions:[{id:"bad-expense",date:"2026-09-10",type:"EXPENSE" as const,status:"RECEIVED" as const,amountCents:1000,description:"Status inválido",accountId:"acc",categoryId:"cat"}]};expect(expensesByCategory(data,"2026-09","REALIZED")).toEqual([]);expect(expensesByCategory(data,"2026-09","PROJECTED")).toEqual([]);});
  it("keeps pending out of realized reports but includes it in projected reports",()=>{
   const data={...base,transactions:[
    {id:"1",date:"2026-09-10",type:"EXPENSE" as const,status:"PAID" as const,amountCents:1000,description:"Pago",accountId:"acc",categoryId:"cat"},
