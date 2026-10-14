@@ -416,18 +416,18 @@ function accountTypeLabel(type:AccountType){return ({CHECKING:"Conta corrente",S
 function InstitutionMark({institution,name}:{institution?:string;name:string}){
  const meta=INSTITUTIONS.find(item=>item.id===institution)??INSTITUTIONS[0];
  const id=meta.id;
- return <span className={`institution-mark institution-${id}`} aria-label={meta.name} title={meta.name}>
-   {id==="bb"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M5 16 15 4h9L14 16l10 12h-9z" fill="#003da5"/><path d="M35 16 25 4h-9l10 12-10 12h9z" fill="#ffdf00"/></svg>
-   :id==="caixa"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M4 8h12l8 8-8 8H4l8-8z" fill="#ff8a00"/><path d="M36 8H24l-8 8 8 8h12l-8-8z" fill="#fff"/><path d="M15 4h10l-5 7zM15 28h10l-5-7z" fill="#00a0df"/></svg>
-   :id==="santander"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M21 3c-1 6 7 8 7 14 0 3-2 5-5 5 1-4-1-7-5-10-1 4-7 7-7 12 0 4 4 6 9 6 9 0 14-5 14-12 0-7-8-10-13-15z" fill="currentColor"/></svg>
+ return <span className={`institution-mark institution-${id}`} role="img" aria-label={meta.name} title={meta.name}>
+   {id==="bb"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M3 16 13 4h9L12 16l10 12h-9z" fill="#003da5"/><path d="M37 16 27 4h-9l10 12-10 12h9z" fill="#ffdf00"/></svg>
+   :id==="caixa"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M3 8h12l8 8-8 8H3l8-8z" fill="#ff8a00"/><path d="M37 8H25l-8 8 8 8h12l-8-8z" fill="#fff"/><path d="M15 4h10l-5 7zM15 28h10l-5-7z" fill="#00a0df"/></svg>
+   :id==="santander"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M21 2c-1 6 7 8 7 14 0 3-2 5-5 5 1-4-1-7-5-10-1 4-7 7-7 12 0 4 4 6 9 6 9 0 14-5 14-12 0-7-8-10-13-15z" fill="currentColor"/></svg>
    :id==="sicredi"?<svg viewBox="0 0 40 32" aria-hidden="true"><circle cx="20" cy="16" r="13" fill="none" stroke="currentColor" strokeWidth="3"/><path d="M20 5 25 13 20 11 15 13zM20 27l-5-8 5 2 5-2zM8 16l8-5-2 5 2 5zM32 16l-8-5 2 5-2 5z" fill="currentColor"/></svg>
    :id==="sicoob"?<svg viewBox="0 0 40 32" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="3"><circle cx="14" cy="11" r="7"/><circle cx="26" cy="11" r="7"/><circle cx="20" cy="22" r="7"/></g></svg>
    :id==="bradesco"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M20 3c-4 5-8 8-8 13a8 8 0 0 0 16 0c0-5-4-8-8-13zm-1 10h2v14h-2zM8 28h24v2H8z" fill="currentColor"/></svg>
    :id==="itau"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="17" fontWeight="900" fill="currentColor">itaú</text></svg>
-   :id==="nubank"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="18" fontWeight="900" fill="currentColor">nu</text></svg>
+   :id==="nubank"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="19" fontWeight="900" fill="currentColor">nu</text></svg>
    :id==="inter"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="21" textAnchor="middle" fontSize="12" fontWeight="900" fill="currentColor">inter</text></svg>
    :id==="c6"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="17" fontWeight="900" fill="currentColor">C6</text></svg>
-   :id==="mercadopago"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M7 12c4-6 8-6 13 0 5-6 9-6 13 0l-5 8H12z" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/><path d="M13 20l7 6 7-6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>
+   :id==="mercadopago"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M6 12c4-6 8-6 14 0 6-6 10-6 14 0l-5 8H11z" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 20l8 6 8-6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>
    :id==="picpay"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="23" textAnchor="middle" fontSize="22" fontWeight="900" fill="currentColor">P</text></svg>
    :id==="none"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M20 3 35 16 20 29 5 16z" fill="none" stroke="currentColor" strokeWidth="3"/><circle cx="20" cy="16" r="4" fill="currentColor"/></svg>
    :<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M7 9h26v14H7z" fill="none" stroke="currentColor" strokeWidth="2.5"/><path d="M7 14h26" stroke="currentColor" strokeWidth="2.5"/></svg>}
