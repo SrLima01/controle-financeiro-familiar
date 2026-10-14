@@ -253,7 +253,7 @@ export function calculateCardAvailableLimit(
   const realizedPayments = transactions
     .filter(tx => tx.status === "PAID" && tx.creditCardId === card.id && tx.type === "CARD_PAYMENT")
     .reduce((sum, tx) => sum + tx.amountCents, 0);
-  const available = Math.max(0, card.creditLimitCents - Math.max(0, committedPurchases - realizedPayments));
+  const available = Math.max(0, card.creditLimitCents - Math.max(0, committedPurchases - realizedPayments) + calculateCardCreditBalance(card, transactions));
   assertCents(available, "cardAvailableLimit");
   return available;
 }
