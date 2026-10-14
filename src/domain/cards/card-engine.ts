@@ -246,12 +246,16 @@ export function calculateCardAvailableLimit(
   card: CreditCard,
   transactions: readonly Transaction[],
 ): number {
-  const available = Math.max(
-    0,
-    card.creditLimitCents -
-      calculateCardOutstanding(card, transactions) +
-      calculateCardCreditBalance(card, transactions),
-  );
+  // Available credit must reserve the full amount of every non-cancelled
+  // card purchase, including planned future installments. Invoice outstanding
+  // remains based on realized purchases only; these are separate concepts.
+  const committedPurchases = transactions
+    .filter(tx => tx.status !== "CANCELLED" && tx.creditCardId === card.id && tx.type === "EXPENSE")
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
+  const realizedPayments = transactions
+    .filter(tx => tx.status === "PAID" && tx.creditCardId === card.id && tx.type === "CARD_PAYMENT")
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
+  const available = Math.max(0, card.creditLimitCents - Math.max(0, committedPurchases - realizedPayments));
   assertCents(available, "cardAvailableLimit");
   return available;
 }
