@@ -485,6 +485,17 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    setBusy(true);setError("");
    try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:"CANCELLED" as const}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível cancelar.");}finally{setBusy(false)}
  }
+ async function removeTransaction(t:Transaction){
+   if(t.installmentGroupId){setError("Esta parcela pertence a um grupo. Cancele-a para preservar o histórico.");return;}
+   if(data.recurringRules.some(rule=>rule.transactionIds.includes(t.id))){setError("Este lançamento pertence a uma recorrência. Use Cancelar para preservar a regra recorrente.");return;}
+   if(!window.confirm(`Apagar o lançamento "${t.description||labelType(t)}" de ${money(t.amountCents)}?`))return;
+   setBusy(true);setError("");
+   try{
+     await onChange({...data,transactions:data.transactions.filter(x=>x.id!==t.id)});
+     if(editing?.id===t.id)reset();
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível apagar o lançamento.");}
+   finally{setBusy(false)}
+ }
  async function cancelGroup(t:Transaction,mode:"ONE"|"THIS_AND_FOLLOWING"){
    const groupId=t.installmentGroupId;if(!groupId)return;
    const label=mode==="ONE"?"esta parcela":"esta e todas as seguintes";
@@ -517,7 +528,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
      return <div className={`transaction-row ${recurringRule?"transaction-row-recurring":""} ${t.status==="CANCELLED"?"transaction-row-cancelled":""}`} key={t.id}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date}{t.scheduledDate&&t.scheduledDate!==t.date?` · agendada ${t.scheduledDate}`:""} · {labelType(t)} · {t.status==="PAID"?"Pago":t.status==="RECEIVED"?"Recebido":t.status==="PENDING"?"Pendente":t.status==="PLANNED"?"Planejado":"Cancelado"}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
        <div className={`transaction-value ${t.status==="CANCELLED"?"money-cancelled":t.type==="INCOME"?"money-positive":t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"money-negative":"money-neutral"}`}><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":t.type==="INCOME"?"+":""}{money(t.amountCents)}</strong><div className="row-actions">
          {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>} </> :
-           <>{(t.status==="PENDING"||t.status==="PLANNED")&&(t.type==="INCOME"||t.type==="EXPENSE")&&<button className="link-button settle-history-button" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:t.type==="INCOME"?"RECEIVED" as const:"PAID" as const}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível confirmar.");}finally{setBusy(false)}}}>✓ {t.type==="INCOME"?"Recebido":"Pago"}</button>}<button className="link-button" onClick={()=>edit(t)}>Editar</button>{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
+           <>{(t.status==="PENDING"||t.status==="PLANNED")&&(t.type==="INCOME"||t.type==="EXPENSE")&&<button className="link-button settle-history-button" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:t.type==="INCOME"?"RECEIVED" as const:"PAID" as const}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível confirmar.");}finally{setBusy(false)}}}>✓ {t.type==="INCOME"?"Recebido":"Pago"}</button>}<button className="link-button" disabled={busy} onClick={()=>edit(t)}>Editar</button>{!group&&!recurringRule&&<button className="link-button danger" disabled={busy} onClick={()=>void removeTransaction(t)}>Apagar</button>}{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
        </div></div></div>
    })}</section></>}
    {view==="new"&&launchMode==="recurring"&&!editing&&<div className="transaction-workspace recurring-workspace"><div className="workspace-heading"><div><span className="eyebrow">Cadastro recorrente</span><h2>Configure uma movimentação que se repete</h2></div><button className="workspace-back" onClick={()=>setLaunchMode("unique")}>← Tipo de lançamento</button></div><Recurring data={data} onChange={onChange} embedded onCreated={()=>setLaunchMode("unique")} onCancel={()=>setLaunchMode("unique")}/></div>}
