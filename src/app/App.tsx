@@ -1173,7 +1173,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
       window.prompt("Copie o link do Leme Familiar:",shareData.url);
     }catch(error){
       if(error instanceof DOMException&&error.name==="AbortError")return;
-      try{await navigator.clipboard.writeText(shareData.url);window.alert("Link do Leme Familiar copiado. Agora é só enviar para quem você quiser.");}
+      try{await navigator.clipboard.writeText(shareData.url);await styledNotice("Link do Leme Familiar copiado. Agora é só enviar para quem você quiser.","Link copiado");}
       catch{window.prompt("Copie o link do Leme Familiar:",shareData.url);}
     }
   }
