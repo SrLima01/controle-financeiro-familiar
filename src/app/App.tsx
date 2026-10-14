@@ -541,17 +541,7 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
        <button className="secondary compact clear-transaction-filters" onClick={()=>{setSearchText("");setFilterCategoryId("");setFilterAccountId("");setFilterStatus("ALL");setFromDate("");setToDate("");setFilter("ALL")}}>Limpar filtros</button>
      </div>
    </section>}
-   <div className="cashflow-filter-heading"><strong>Todos os lançamentos</strong><span>{visible.length} resultado(s)</span></div><div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
-   <section className="panel transaction-search-panel"><label className="transaction-search-field"><span aria-hidden="true">⌕</span><input type="search" value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Pesquisar por nome ou descrição…" aria-label="Pesquisar lançamentos"/></label>
-     <div className="transaction-filter-grid">
-       <label>Categoria<select value={filterCategoryId} onChange={e=>setFilterCategoryId(e.target.value)}><option value="">Todas as categorias</option>{data.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-       <label>Conta<select value={filterAccountId} onChange={e=>setFilterAccountId(e.target.value)}><option value="">Todas as contas</option>{data.accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
-       <label>Situação<select value={filterStatus} onChange={e=>setFilterStatus(e.target.value as "ALL"|TransactionStatus)}><option value="ALL">Todas as situações</option><option value="PAID">Pago</option><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option><option value="CANCELLED">Cancelado</option></select></label>
-       <label>De<input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/></label>
-       <label>Até<input type="date" value={toDate} min={fromDate||undefined} onChange={e=>setToDate(e.target.value)}/></label>
-       <button className="secondary compact clear-transaction-filters" onClick={()=>{setSearchText("");setFilterCategoryId("");setFilterAccountId("");setFilterStatus("ALL");setFromDate("");setToDate("");setFilter("ALL")}}>Limpar filtros</button>
-     </div>
-   </section>
+   <div className="cashflow-filter-heading"><strong>Todos os lançamentos</strong><span>{visible.length} resultado(s)</span></div>
    <section className="panel transaction-list">{visible.length===0?<Empty text="Nenhum lançamento encontrado."/>:visible.map(t=>{
      const group=t.installmentGroupId?data.installmentGroups.find(g=>g.id===t.installmentGroupId):undefined;
      const n=group?getInstallmentNumber(group,t.id):undefined;
