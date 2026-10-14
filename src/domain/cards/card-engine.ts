@@ -250,10 +250,12 @@ export function calculateCardAvailableLimit(
   const committedPurchases = transactions
     .filter(tx => tx.status !== "CANCELLED" && tx.creditCardId === card.id && tx.type === "EXPENSE")
     .reduce((sum, tx) => sum + tx.amountCents, 0);
-  const realizedPayments = transactions
-    .filter(tx => tx.status === "PAID" && tx.creditCardId === card.id && tx.type === "CARD_PAYMENT")
-    .reduce((sum, tx) => sum + tx.amountCents, 0);
-  const available = Math.max(0, card.creditLimitCents - Math.max(0, committedPurchases - realizedPayments) + calculateCardCreditBalance(card, transactions));
+  // Only payments allocated to purchases restore the corresponding limit.
+  // Any excess remains a separate card credit; adding all payments here would
+  // count an advance payment twice when no eligible invoice exists yet.
+  const allocatedPayments = allocateCardPayments(card, transactions)
+    .reduce((sum, allocation) => sum + allocation.amountCents, 0);
+  const available = Math.max(0, card.creditLimitCents - Math.max(0, committedPurchases - allocatedPayments) + calculateCardCreditBalance(card, transactions));
   assertCents(available, "cardAvailableLimit");
   return available;
 }
