@@ -8,7 +8,9 @@ export type ReportMode="REALIZED"|"PROJECTED";
 
 function includedStatus(t:Transaction,mode:ReportMode){
   if(t.status==="CANCELLED") return false;
-  return mode==="REALIZED" ? (t.status==="PAID"||t.status==="RECEIVED") : true;
+  const validRealizedStatus=t.type==="INCOME"?t.status==="RECEIVED":t.status==="PAID";
+  if(mode==="REALIZED") return validRealizedStatus;
+  return validRealizedStatus||t.status==="PENDING"||t.status==="PLANNED";
 }
 function activeExpense(t:Transaction,mode:ReportMode){return t.type==="EXPENSE"&&includedStatus(t,mode)}
 
