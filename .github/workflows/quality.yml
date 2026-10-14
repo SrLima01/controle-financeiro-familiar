@@ -21,7 +21,7 @@ jobs:
       - name: Dependency security audit
         run: |
           npm audit --json > /tmp/npm-audit.json || true
-          node -e "const a=require('/tmp/npm-audit.json'); for (const [name,v] of Object.entries(a.vulnerabilities||{})) console.log(JSON.stringify({name,severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:{name:x.name,title:x.title,url:x.url,range:x.range})}))"
+          node -e "const a=require('/tmp/npm-audit.json'); const entries=Object.entries(a.vulnerabilities||{}); for (const [name,v] of entries) console.log(JSON.stringify({name,severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:{name:x.name,title:x.title,url:x.url,range:x.range})})); if(a.error){console.error('npm audit falhou:',a.error.summary||a.error.code||'erro desconhecido');process.exit(1)} const blockers=entries.filter(([,v])=>v.severity==='critical'||v.severity==='high'); if(blockers.length){console.error(blockers.length+' dependência(s) com vulnerabilidade alta/crítica.');process.exit(1)} console.log(entries.length+' pacote(s) com avisos; nenhuma vulnerabilidade alta/crítica.');"
       - name: Tests
         run: npm test
       - name: Typecheck
