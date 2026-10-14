@@ -407,3 +407,17 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
 @keyframes splash-wave-travel{0%{left:-18%}100%{left:100%}}
 @keyframes splash-progress{0%{transform:translateX(-120%)}100%{transform:translateX(260%)}}
 @media(prefers-reduced-motion:reduce){.splash-emblem,.splash-boat,.splash-wordmark,.splash-brand p,.splash-horizon,.splash-horizon span,.splash-loading:after{animation:none!important;opacity:1!important;transform:none!important;left:0!important}}
+
+/* Controles principais de pesquisa: visíveis no topo da aba no celular */
+.transaction-quick-controls{display:grid;gap:12px;margin:0 0 16px;padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--surface)}
+.transaction-quick-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:14px}
+.transaction-quick-title span{color:var(--muted);font-size:12px;font-weight:500}
+.transaction-quick-controls .transaction-search-field{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.transaction-quick-controls .transaction-search-field>span{font-size:24px;line-height:1;color:var(--muted)}
+.transaction-quick-controls .transaction-search-field input{width:100%;min-width:0;border:0;outline:none;background:transparent;color:var(--text);font-size:16px}
+.transaction-quick-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.transaction-quick-grid label{display:grid;gap:5px;min-width:0;font-size:12px;font-weight:650;color:var(--text)}
+.transaction-quick-grid label select{width:100%;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:10px;padding:8px;background:var(--surface);color:var(--text);font-size:14px}
+.transaction-row-interactive{cursor:pointer;transition:background .15s ease}
+.transaction-row-interactive:focus-visible{outline:2px solid var(--accent,#6076c7);outline-offset:2px}
+@media(max-width:520px){.transaction-quick-grid{grid-template-columns:1fr 1fr}.transaction-quick-controls{padding:13px}.transaction-row-interactive .row-actions{display:flex;flex-wrap:wrap;gap:4px}.transaction-row-interactive .link-button{min-height:36px;padding:6px 8px}}
