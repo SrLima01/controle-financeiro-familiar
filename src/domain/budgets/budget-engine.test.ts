@@ -10,6 +10,7 @@ const data: EntityCollection = {people:[],categories:[],accounts:[],cards:[],tra
 ],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[budget]};
 describe("budget engine",()=>{
  it("counts only realized expenses by purchase month and excludes cancelled",()=>expect(getBudgetSpent(data,budget)).toBe(70000));
+ it("does not count an expense with the income-only RECEIVED status",()=>{const d={...data,transactions:[...data.transactions,{id:"wrong-status",date:"2026-09-25",type:"EXPENSE" as const,status:"RECEIVED" as const,amountCents:40000,description:"Status inválido",categoryId:"c"}]};expect(getBudgetSpent(d,budget)).toBe(70000)});
  it("uses 80 and 100 thresholds",()=>{expect(getBudgetStatus(80000,100000)).toBe("ATTENTION");expect(getBudgetStatus(100001,100000)).toBe("EXCEEDED")});
  it("counts a realized card purchase in the budget but never the card payment",()=>{const d={...data,transactions:[...data.transactions,{id:"5",date:"2026-09-05",type:"EXPENSE" as const,status:"PAID" as const,amountCents:30000,description:"Compra cartão",categoryId:"c",creditCardId:"card"},{id:"6",date:"2026-09-20",type:"CARD_PAYMENT" as const,status:"PAID" as const,amountCents:30000,description:"Pagamento fatura",accountId:"account",creditCardId:"card"}]};expect(getBudgetSpent(d,budget)).toBe(100000)});
 });

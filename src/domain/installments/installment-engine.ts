@@ -85,3 +85,11 @@ export function getInstallmentNumber(group: InstallmentGroup, transactionId: str
   if (index < 0) throw new Error("Parcela não pertence ao grupo.");
   return index + 1;
 }
+
+
+export function deleteInstallmentGroup(data:EntityCollection,groupId:string):EntityCollection{
+ const group=data.installmentGroups.find(item=>item.id===groupId);
+ if(!group)throw new Error("Grupo de parcelas não encontrado.");
+ const ids=new Set(group.transactionIds);
+ return {...data,transactions:data.transactions.filter(tx=>tx.installmentGroupId!==groupId&&!ids.has(tx.id)),installmentGroups:data.installmentGroups.filter(item=>item.id!==groupId)};
+}

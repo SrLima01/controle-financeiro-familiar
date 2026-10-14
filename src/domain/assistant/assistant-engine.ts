@@ -3,7 +3,7 @@ import type { EntityCollection } from "../../infrastructure/persistence/reposito
 export type Insight={kind:"positive"|"attention"|"info";title:string;detail:string};
 export type AssistantAnalysis={insights:Insight[]};
 
-const realized=(t:{status:string})=>t.status==="PAID"||t.status==="RECEIVED";
+const realized=(t:{type:string;status:string})=>t.type==="INCOME"?t.status==="RECEIVED":t.status==="PAID";
 export function analyzeFinances(data:EntityCollection,month:string):AssistantAnalysis{
  const insights:Insight[]=[];
  const expenses=data.transactions.filter(t=>t.type==="EXPENSE"&&realized(t)&&t.status!=="CANCELLED"&&t.date.slice(0,7)===month);
@@ -22,9 +22,10 @@ export function analyzeFinances(data:EntityCollection,month:string):AssistantAna
   else if(pct>=80) insights.push({kind:"attention",title:`Orçamento próximo do limite: ${name}`,detail:`${pct.toFixed(0)}% do orçamento já foi realizado.`});
  }
  const pending=data.transactions.filter(t=>(t.status==="PENDING"||t.status==="PLANNED")&&t.date.slice(0,7)===month);
- const pendingExpense=pending.filter(t=>t.type==="EXPENSE"||t.type==="CARD_PAYMENT").reduce((s,t)=>s+t.amountCents,0);
+ const pendingExpense=pending.filter(t=>(t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT").reduce((s,t)=>s+t.amountCents,0);
  const pendingIncome=pending.filter(t=>t.type==="INCOME").reduce((s,t)=>s+t.amountCents,0);
- if(pending.length) insights.push({kind:"info",title:"Há movimentos futuros/pendentes",detail:`Impacto previsto: entradas R$ ${(pendingIncome/100).toFixed(2)} e saídas R$ ${(pendingExpense/100).toFixed(2)}.`});
+ const pendingCardPurchases=pending.filter(t=>t.type==="EXPENSE"&&!!t.creditCardId).reduce((s,t)=>s+t.amountCents,0);
+ if(pending.length) insights.push({kind:"info",title:"Há movimentos futuros/pendentes",detail:`Impacto previsto no caixa: entradas R$ ${(pendingIncome/100).toFixed(2)} e saídas R$ ${(pendingExpense/100).toFixed(2)}. Compras no cartão ainda não pagas: R$ ${(pendingCardPurchases/100).toFixed(2)} (não descontadas novamente do caixa).`});
  const top=new Map<string,number>(); for(const t of expenses) if(t.categoryId) top.set(t.categoryId,(top.get(t.categoryId)||0)+t.amountCents);
  const first=[...top.entries()].sort((a,b)=>b[1]-a[1])[0];
  if(first){const name=data.categories.find(c=>c.id===first[0])?.name??"Categoria";insights.push({kind:"info",title:"Maior categoria de despesa",detail:`${name}: R$ ${(first[1]/100).toFixed(2)} no mês.`});}
