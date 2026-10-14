@@ -495,3 +495,45 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
   .transaction-quick-grid .clear-transaction-filters{justify-self:stretch}
   .transaction-row .transaction-value>strong{max-width:38vw;font-size:13px}
 }
+
+
+/* Lançamentos: status legível sem faixa lateral e ações por ícone */
+.transaction-row-recurring{border-left:0!important}
+.transaction-status{
+  display:inline-flex;align-items:center;vertical-align:middle;margin:3px 0 0 5px;
+  padding:3px 7px;border-radius:999px;font-size:10px;font-weight:800;line-height:1.35;
+  white-space:nowrap;border:1px solid transparent
+}
+.status-paid{background:#e9edf2;color:#273444;border-color:#d6dde6}
+.status-received{background:#e2f6e9;color:#17683a;border-color:#b9e8ca}
+.status-planned{background:#fff2c7;color:#805500;border-color:#f4d879}
+.status-overdue{background:#fde7e7;color:#a51f2b;border-color:#f4b7bc}
+.status-pending{background:#eef1f5;color:#596579;border-color:#dce2ea}
+.status-cancelled{background:#eceef1;color:#737b87;border-color:#d8dce2;text-decoration:line-through}
+.status-value-paid{color:#273444!important}
+.status-value-received{color:#16804a!important}
+.status-value-planned{color:#9a6700!important}
+.status-value-overdue{color:#c62835!important}
+.status-value-pending{color:#687386!important}
+:root[data-theme="dark"] .status-paid{background:#303947;color:#edf2f7;border-color:#475365}
+:root[data-theme="dark"] .status-received{background:#143b2b;color:#9ae6b4;border-color:#246447}
+:root[data-theme="dark"] .status-planned{background:#493916;color:#ffdf80;border-color:#76591b}
+:root[data-theme="dark"] .status-overdue{background:#4a2028;color:#ffadb4;border-color:#7b303b}
+:root[data-theme="dark"] .status-pending{background:#303947;color:#c5ceda;border-color:#475365}
+:root[data-theme="dark"] .status-cancelled{background:#30343b;color:#a8b0bc;border-color:#444b55}
+:root[data-theme="dark"] .status-value-paid{color:#e1e7ef!important}
+:root[data-theme="dark"] .status-value-received{color:#63d99a!important}
+:root[data-theme="dark"] .status-value-planned{color:#ffdf80!important}
+:root[data-theme="dark"] .status-value-overdue{color:#ff7b84!important}
+:root[data-theme="dark"] .status-value-pending{color:#b7c0ce!important}
+.icon-action-button{width:36px;min-width:36px;height:36px;min-height:36px;padding:0!important;display:inline-flex!important;align-items:center;justify-content:center;border-radius:10px!important}
+.icon-action-button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.transaction-row .icon-action-button.danger{background:color-mix(in srgb,var(--danger,#a13b3b) 7%,var(--surface,#fff));}
+.transaction-row .row-actions{gap:7px}
+.transaction-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.transaction-quick-grid label:first-child{grid-column:1/-1}
+@media(max-width:520px){
+ .transaction-status{font-size:10px;padding:3px 6px}
+ .icon-action-button{width:36px;min-width:36px;height:36px;min-height:36px}
+}
+:root[data-theme="dark"] .transaction-row .icon-action-button.danger{background:color-mix(in srgb,var(--danger,#c55) 15%,var(--surface,#171e2b))}
