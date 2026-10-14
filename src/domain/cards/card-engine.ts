@@ -226,7 +226,11 @@ export function calculateCardOutstanding(
 ): number {
   let purchases = 0;
   for (const tx of transactions) {
-    if (tx.status === "PAID" && tx.creditCardId === card.id && tx.type === "EXPENSE") {
+    // Every non-cancelled installment reserves its share of the credit limit,
+    // even when its invoice is still planned for a future month. The invoice
+    // view decides when each installment is payable; the limit reflects the
+    // full remaining purchase commitment.
+    if (tx.status !== "CANCELLED" && tx.creditCardId === card.id && tx.type === "EXPENSE") {
       purchases += tx.amountCents;
     }
   }
