@@ -582,3 +582,14 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
 :root[data-theme="dark"] .app-dialog-symbol.app-dialog-info{background:#253453;color:#a5bfff;}
 @keyframes app-dialog-in{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-width:420px){.app-dialog{padding:21px;border-radius:19px}.app-dialog h2{font-size:18px}.app-dialog-actions{flex-direction:column-reverse}.app-dialog-actions button{width:100%;}}
+
+/* Layout responsivo dos detalhes da fatura do cartão */
+.invoice-detail{width:100%;min-width:0;max-width:100%;overflow:hidden}
+.invoice-detail select{display:block;width:100%;min-width:0;max-width:100%}
+.invoice-detail .hero-card{max-width:100%;min-width:0;overflow-wrap:anywhere}
+.invoice-transaction-list{width:100%;min-width:0}
+.invoice-transaction-row{width:100%;min-width:0;gap:10px;flex-wrap:wrap}
+.invoice-transaction-info{flex:1 1 180px;min-width:0;overflow-wrap:anywhere;word-break:break-word}
+.invoice-transaction-info strong,.invoice-transaction-info span{max-width:100%;overflow-wrap:anywhere;word-break:break-word}
+.invoice-transaction-amount{flex:0 0 auto;white-space:nowrap}
+@media(max-width:520px){.invoice-detail{padding:13px}.invoice-detail .section-title{align-items:flex-start;gap:8px;flex-wrap:wrap}.invoice-detail .section-title h3{margin:0}.invoice-detail .section-title>span{font-size:12px}.invoice-transaction-row{align-items:flex-start}.invoice-transaction-amount{margin-left:auto}.invoice-detail .hero-card{padding:16px}.invoice-detail .hero-card strong{font-size:28px}}
