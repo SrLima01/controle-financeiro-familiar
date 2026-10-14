@@ -283,6 +283,88 @@ function Dashboard({data,onChange,onQuickAction,hideValues,onToggleHideValues,sy
 
 function Empty({text}:{text:string}) { return <div className="empty">{text}</div>; }
 
+function styledConfirm(message:string,title="Confirmar ação",confirmLabel="Confirmar"):Promise<boolean>{
+  return new Promise(resolve=>{
+    const backdrop=document.createElement("div");
+    backdrop.className="app-dialog-backdrop";
+    backdrop.setAttribute("role","presentation");
+    const dialog=document.createElement("section");
+    dialog.className="app-dialog";
+    dialog.setAttribute("role","alertdialog");
+    dialog.setAttribute("aria-modal","true");
+    const symbol=document.createElement("div");
+    symbol.className="app-dialog-symbol";
+    symbol.textContent="!";
+    const heading=document.createElement("h2");
+    heading.textContent=title;
+    const copy=document.createElement("p");
+    copy.textContent=message;
+    const actions=document.createElement("div");
+    actions.className="app-dialog-actions";
+    const cancel=document.createElement("button");
+    cancel.type="button";
+    cancel.className="secondary";
+    cancel.textContent="Voltar";
+    const confirmButton=document.createElement("button");
+    confirmButton.type="button";
+    confirmButton.className="primary app-dialog-danger";
+    confirmButton.textContent=confirmLabel;
+    let settled=false;
+    const finish=(value:boolean)=>{
+      if(settled)return;
+      settled=true;
+      document.removeEventListener("keydown",onKeyDown);
+      backdrop.remove();
+      resolve(value);
+    };
+    const onKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape")finish(false);};
+    cancel.addEventListener("click",()=>finish(false));
+    confirmButton.addEventListener("click",()=>finish(true));
+    backdrop.addEventListener("click",event=>{if(event.target===backdrop)finish(false);});
+    actions.append(cancel,confirmButton);
+    dialog.append(symbol,heading,copy,actions);
+    backdrop.append(dialog);
+    document.body.append(backdrop);
+    document.addEventListener("keydown",onKeyDown);
+    cancel.focus();
+  });
+}
+function styledNotice(message:string,title="Aviso",buttonLabel="Entendi"):Promise<void>{
+  return new Promise(resolve=>{
+    const backdrop=document.createElement("div");
+    backdrop.className="app-dialog-backdrop";
+    backdrop.setAttribute("role","presentation");
+    const dialog=document.createElement("section");
+    dialog.className="app-dialog";
+    dialog.setAttribute("role","dialog");
+    dialog.setAttribute("aria-modal","true");
+    const symbol=document.createElement("div");
+    symbol.className="app-dialog-symbol app-dialog-info";
+    symbol.textContent="i";
+    const heading=document.createElement("h2");
+    heading.textContent=title;
+    const copy=document.createElement("p");
+    copy.textContent=message;
+    const actions=document.createElement("div");
+    actions.className="app-dialog-actions app-dialog-actions-end";
+    const close=document.createElement("button");
+    close.type="button";
+    close.className="primary";
+    close.textContent=buttonLabel;
+    const finish=()=>{document.removeEventListener("keydown",onKeyDown);backdrop.remove();resolve();};
+    const onKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape")finish();};
+    close.addEventListener("click",finish);
+    backdrop.addEventListener("click",event=>{if(event.target===backdrop)finish();});
+    actions.append(close);
+    dialog.append(symbol,heading,copy,actions);
+    backdrop.append(dialog);
+    document.body.append(backdrop);
+    document.addEventListener("keydown",onKeyDown);
+    close.focus();
+  });
+}
+
+
 function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
   const [editing,setEditing]=useState<Account|null>(null);
   const [name,setName]=useState(""); const [type,setType]=useState<AccountType>("CHECKING"); const [opening,setOpening]=useState(""); const [institution,setInstitution]=useState("none");
@@ -300,7 +382,7 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
     setBusy(true);try{await onChange(next);reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false);}
   }
   async function archive(a:Account){
-    if(!confirm("Arquivar a conta \"" + a.name + "\"? O histórico será preservado."))return;
+    if(!await styledConfirm("Arquivar a conta \"" + a.name + "\"? O histórico será preservado."))return;
     try{validateAccountArchive(a,{accounts:data.accounts,cards:data.cards,transactions:data.transactions},data.recurringRules)}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");return;}
     setBusy(true);setError("");try{await onChange({...data,accounts:data.accounts.map(x=>x.id===a.id?{...x,active:false}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");}finally{setBusy(false);}
   }
@@ -498,14 +580,14 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false)}
  }
  async function cancel(t:Transaction){
-   if(!confirm("Cancelar este lançamento? O histórico será preservado."))return;
+   if(!await styledConfirm("Cancelar este lançamento? O histórico será preservado."))return;
    setBusy(true);setError("");
    try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:"CANCELLED" as const}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível cancelar.");}finally{setBusy(false)}
  }
  async function removeTransaction(t:Transaction){
    if(t.installmentGroupId){setError("Esta parcela pertence a um grupo. Cancele-a para preservar o histórico.");return;}
    if(data.recurringRules.some(rule=>rule.transactionIds.includes(t.id))){setError("Este lançamento pertence a uma recorrência. Use Cancelar para preservar a regra recorrente.");return;}
-   if(!window.confirm(`Apagar o lançamento "${t.description||labelType(t)}" de ${money(t.amountCents)}?`))return;
+   if(!await styledConfirm(`Apagar o lançamento "${t.description||labelType(t)}" de ${money(t.amountCents)}?`))return;
    setBusy(true);setError("");
    try{
      await onChange({...data,transactions:data.transactions.filter(x=>x.id!==t.id)});
@@ -516,7 +598,7 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
  async function removeRecurringOccurrence(t:Transaction){
    const rule=data.recurringRules.find(item=>item.transactionIds.includes(t.id));if(!rule){setError("Regra recorrente desta ocorrência não encontrada.");return;}
    const realized=t.status==="PAID"||t.status==="RECEIVED";
-   if(!confirm(`Apagar somente a ocorrência "${t.description||labelType(t)}" agendada para ${getRecurringScheduledDate(t)}? A ocorrência será removida e não será gerada novamente. ${realized?"Este registro já foi realizado; a exclusão alterará saldos, faturas e relatórios.": "A regra e as demais ocorrências serão preservadas."} `))return;
+   if(!await styledConfirm(`Apagar somente a ocorrência "${t.description||labelType(t)}" agendada para ${getRecurringScheduledDate(t)}? A ocorrência será removida e não será gerada novamente. ${realized?"Este registro já foi realizado; a exclusão alterará saldos, faturas e relatórios.": "A regra e as demais ocorrências serão preservadas."} `))return;
    setBusy(true);setError("");
    try{await onChange(deleteRecurringOccurrence(data,t.id));if(editing?.id===t.id)reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível excluir a ocorrência recorrente.");}finally{setBusy(false)}
  }
@@ -524,14 +606,14 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
    const groupId=t.installmentGroupId;if(!groupId)return;
    const group=data.installmentGroups.find(item=>item.id===groupId);if(!group){setError("Grupo de parcelas não encontrado.");return;}
    const realizedCount=data.transactions.filter(tx=>group.transactionIds.includes(tx.id)&&(tx.status==="PAID"||tx.status==="RECEIVED")).length;
-   if(!confirm(`Excluir definitivamente o parcelamento "${group.description}" e suas ${group.transactionIds.length} parcelas? Isso também apagará ${realizedCount} lançamento(s) realizado(s) e alterará saldos, faturas e relatórios. Use apenas para testes ou registros incorretos.`))return;
+   if(!await styledConfirm(`Excluir definitivamente o parcelamento "${group.description}" e suas ${group.transactionIds.length} parcelas? Isso também apagará ${realizedCount} lançamento(s) realizado(s) e alterará saldos, faturas e relatórios. Use apenas para testes ou registros incorretos.`))return;
    setBusy(true);setError("");
    try{await onChange(deleteInstallmentGroup(data,groupId));if(editing&&group.transactionIds.includes(editing.id))reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível excluir o parcelamento.");}finally{setBusy(false)}
  }
  async function cancelGroup(t:Transaction,mode:"ONE"|"THIS_AND_FOLLOWING"){
    const groupId=t.installmentGroupId;if(!groupId)return;
    const label=mode==="ONE"?"esta parcela":"esta e todas as seguintes";
-   if(!confirm(`Cancelar ${label}? O histórico será preservado.`))return;
+   if(!await styledConfirm(`Cancelar ${label}? O histórico será preservado.`))return;
    setBusy(true);setError("");
    try{await onChange(cancelInstallments(data,groupId,t.id,mode));}catch(e){setError(e instanceof Error?e.message:"Não foi possível cancelar as parcelas.");}finally{setBusy(false)}
  }
@@ -639,13 +721,13 @@ function Recurring({data,onChange,embedded=false,onCreated,onCancel}:{data:Entit
    try{const horizon=new Date();horizon.setMonth(horizon.getMonth()+12);const through=`${horizon.getFullYear()}-${String(horizon.getMonth()+1).padStart(2,"0")}-${String(horizon.getDate()).padStart(2,"0")}`;const result=generateRecurringTransactions(data,rule,through);await onChange(result.data)}catch(e){setError(e instanceof Error?e.message:"Não foi possível gerar os lançamentos.");}finally{setBusy(false)}
  }
  async function deactivate(rule:RecurringRule){
-   if(!confirm("Desativar esta recorrência? O histórico será preservado; ocorrências futuras pendentes/planejadas geradas automaticamente serão canceladas, e exceções editadas individualmente serão mantidas."))return;
+   if(!await styledConfirm("Desativar esta recorrência? O histórico será preservado; ocorrências futuras pendentes/planejadas geradas automaticamente serão canceladas, e exceções editadas individualmente serão mantidas."))return;
    setBusy(true);setError("");
    try{await onChange(deactivateRecurringRule(data,rule.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível desativar.")}finally{setBusy(false)}
  }
  async function removeRule(rule:RecurringRule){
    const realizedCount=data.transactions.filter(tx=>rule.transactionIds.includes(tx.id)&&(tx.status==="PAID"||tx.status==="RECEIVED")).length;
-   if(!confirm(`Excluir definitivamente a recorrência "${rule.description}" e todos os ${rule.transactionIds.length} lançamentos gerados? Isso também apagará ${realizedCount} lançamento(s) realizado(s) e alterará saldos, faturas e relatórios. Use apenas para testes ou registros incorretos.`))return;
+   if(!await styledConfirm(`Excluir definitivamente a recorrência "${rule.description}" e todos os ${rule.transactionIds.length} lançamentos gerados? Isso também apagará ${realizedCount} lançamento(s) realizado(s) e alterará saldos, faturas e relatórios. Use apenas para testes ou registros incorretos.`))return;
    setBusy(true);setError("");
    try{await onChange(deleteRecurringRuleAndOccurrences(data,rule.id));if(editing?.id===rule.id)reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível excluir a recorrência.");}finally{setBusy(false)}
  }
@@ -686,7 +768,7 @@ function Pots({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollec
  async function movement(potId:string){
    setError("");try{const cents=parseAmount(amount);const next=createPotMovement(data,{potId,type:movementType,amountCents:cents,date:todayFinancialDate(),description:description|| (movementType==="DEPOSIT"?"Reserva":"Resgate")},real);setBusy(true);await onChange(next);setAmount("");setDescription("")}catch(e){setError(e instanceof Error?e.message:"Não foi possível registrar o movimento.")}finally{setBusy(false)}
  }
- async function archive(pot:Pot){if(!confirm("Arquivar esta caixinha? O histórico dos movimentos será preservado."))return;setBusy(true);setError("");try{await onChange(archivePot(data,pot.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
+ async function archive(pot:Pot){if(!await styledConfirm("Arquivar esta caixinha? O histórico dos movimentos será preservado."))return;setBusy(true);setError("");try{await onChange(archivePot(data,pot.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
  return <div className="page-content">
    <div className="page-heading"><div><span className="eyebrow">Reservas</span><h1>Caixinhas</h1></div><button className="primary compact" onClick={reset}>+ Nova caixinha</button></div>
    {error&&<div className="global-alert">{error}</div>}
@@ -715,7 +797,7 @@ function Budgets({data,onChange}:{data:EntityCollection;onChange:(next:EntityCol
      setBusy(true);await onChange(next);reset();
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar o orçamento.")}finally{setBusy(false)}
  }
- async function archive(b:Budget){if(!confirm("Arquivar este orçamento? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,budgets:data.budgets.map(x=>x.id===b.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
+ async function archive(b:Budget){if(!await styledConfirm("Arquivar este orçamento? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,budgets:data.budgets.map(x=>x.id===b.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
  return <div className="page-content">
   <div className="page-heading"><div><span className="eyebrow">Planejamento</span><h1>Orçamentos</h1></div><button className="primary compact" onClick={reset}>+ Novo orçamento</button></div>
   {error&&<div className="global-alert">{error}</div>}
@@ -750,21 +832,21 @@ function Settings({data,family,onChange,onSignOut,syncStatus}:{data:EntityCollec
   setError("");setBusy(true);
   try{
    const next=importJson(await file.text());
-   if(!confirm("Importar este backup substituirá os dados locais atuais. Deseja continuar?"))return;
-   await onChange(next); alert("Backup importado com sucesso.");
+   if(!await styledConfirm("Importar este backup substituirá os dados locais atuais. Deseja continuar?"))return;
+   await onChange(next); await styledNotice("Backup importado com sucesso.","Importação concluída");
   }catch(e){setError(e instanceof Error?e.message:"Backup inválido.");}
   finally{setBusy(false);}
  }
  async function resetFinancialData(){
   if(syncStatus!=="synced"){setError("Aguarde a sincronização concluir antes de zerar os dados da família.");return;}
   if(resetPhrase!=="ZERAR DADOS"){setError("Digite exatamente ZERAR DADOS para confirmar.");return;}
-  if(!confirm("ATENÇÃO: este comando zera os DADOS FINANCEIROS DA FAMÍLIA e será sincronizado com todos os aparelhos. Contas, cartões, lançamentos, parcelas, recorrências, caixinhas, orçamentos e pessoas serão apagados. Categorias, família e login serão preservados. Faça um backup antes de continuar. Deseja realmente apagar os dados da família?"))return;
+  if(!await styledConfirm("ATENÇÃO: este comando zera os DADOS FINANCEIROS DA FAMÍLIA e será sincronizado com todos os aparelhos. Contas, cartões, lançamentos, parcelas, recorrências, caixinhas, orçamentos e pessoas serão apagados. Categorias, família e login serão preservados. Faça um backup antes de continuar. Deseja realmente apagar os dados da família?"))return;
   setError("");setBusy(true);
   try{
    const next:EntityCollection={...data,people:[],accounts:[],cards:[],transactions:[],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[]};
    await onChange(next);
    setResetPhrase("");setResetOpen(false);
-   alert("Dados financeiros zerados com segurança. A estrutura da família e as categorias foram preservadas.");
+   await styledNotice("Dados financeiros zerados com segurança. A estrutura da família e as categorias foram preservadas.","Dados financeiros zerados");
   }catch(e){setError(e instanceof Error?e.message:"Não foi possível zerar os dados financeiros.");}
   finally{setBusy(false);}
  }
@@ -934,7 +1016,7 @@ function Categories({data,onChange}:{data:EntityCollection;onChange:(next:Entity
  function reset(){setEditing(null);setName("");setEmoji("🏷️");setKind("EXPENSE");setError("")}
  function edit(c:Category){setEditing(c);setName(c.name);setEmoji(c.emoji??"🏷️");setKind(c.kind);setError("")}
  async function save(){setError("");try{const c=editing?updateCategory(editing,name,kind,data,emoji):createCategory(name,kind,data,emoji);setBusy(true);await onChange({...data,categories:editing?data.categories.map(x=>x.id===c.id?c:x):[...data.categories,c]});reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a categoria.");}finally{setBusy(false)}}
- async function archive(c:Category){if(!confirm("Arquivar esta categoria? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,categories:data.categories.map(x=>x.id===c.id?archiveCategory(x):x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar a categoria.");}finally{setBusy(false)}}
+ async function archive(c:Category){if(!await styledConfirm("Arquivar esta categoria? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,categories:data.categories.map(x=>x.id===c.id?archiveCategory(x):x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar a categoria.");}finally{setBusy(false)}}
  const active=data.categories.filter(c=>c.active);
  return <div className="page-content">
   <div className="page-heading"><div><span className="eyebrow">Cadastros</span><h1>Categorias</h1></div><button className="primary compact" onClick={reset}>+ Nova categoria</button></div>
@@ -965,7 +1047,7 @@ function People({data,onChange}:{data:EntityCollection;onChange:(next:EntityColl
  }
 
  async function archive(person:Person){
-   if(!confirm("Arquivar esta pessoa? O histórico de lançamentos será preservado."))return;
+   if(!await styledConfirm("Arquivar esta pessoa? O histórico de lançamentos será preservado."))return;
    setBusy(true);setError("");
    try{await onChange({...data,people:data.people.map(p=>p.id===person.id?archivePerson(p):p)});}
    catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar a pessoa.");}
@@ -1007,7 +1089,7 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
   function openNew(){reset();setFormOpen(true)}
  function edit(c:CreditCard){setEditing(c);setName(c.name);setAccountId(c.accountId);setLimit((c.creditLimitCents/100).toFixed(2).replace(".",","));setClosingDay(String(c.closingDay));setDueDay(String(c.dueDay));setError("");setFormOpen(true)}
  async function save(){setError("");try{const cents=parseAmount(limit),close=Number(closingDay),due=Number(dueDay);if(!name.trim()||!accountId||!Number.isInteger(close)||close<1||close>31||!Number.isInteger(due)||due<1||due>31)throw new Error("Preencha nome, conta e dias válidos.");const card:CreditCard={id:editing?.id??crypto.randomUUID(),name:name.trim(),accountId,creditLimitCents:cents,closingDay:close,dueDay:due,active:true};if(editing){validateCreditCardUpdate(editing,card,data.accounts.map(a=>a.id),data.transactions)}else{validateCreditCard(card,data.accounts.filter(a=>a.active).map(a=>a.id))}const next={...data,cards:editing?data.cards.map(c=>c.id===card.id?card:c):[...data.cards,card]};setBusy(true);await onChange(next);reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar o cartão.")}finally{setBusy(false)}}
- async function archive(c:CreditCard){if(!confirm("Arquivar este cartão? O histórico será preservado."))return;try{validateCreditCardArchive(c,data.recurringRules)}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");return;}setBusy(true);setError("");try{await onChange({...data,cards:data.cards.map(x=>x.id===c.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
+ async function archive(c:CreditCard){if(!await styledConfirm("Arquivar este cartão? O histórico será preservado."))return;try{validateCreditCardArchive(c,data.recurringRules)}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");return;}setBusy(true);setError("");try{await onChange({...data,cards:data.cards.map(x=>x.id===c.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
  async function reactivate(c:CreditCard){
    const account=data.accounts.find(a=>a.id===c.accountId);
    if(!account?.active){setError("A conta vinculada ao cartão está arquivada. Reative a conta antes de reativar o cartão.");return;}
@@ -1087,7 +1169,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
     const shareData={title:"Leme Familiar",text:"Organize as finanças da sua família com o Leme Familiar.",url:window.location.origin};
     try{
       if(navigator.share){await navigator.share(shareData);return;}
-      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(shareData.url);window.alert("Link do Leme Familiar copiado. Agora é só enviar para quem você quiser.");return;}
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(shareData.url);await styledNotice("Link do Leme Familiar copiado. Agora é só enviar para quem você quiser.","Link copiado");return;}
       window.prompt("Copie o link do Leme Familiar:",shareData.url);
     }catch(error){
       if(error instanceof DOMException&&error.name==="AbortError")return;
