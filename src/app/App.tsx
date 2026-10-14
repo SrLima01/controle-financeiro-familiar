@@ -414,7 +414,22 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
 const INSTITUTIONS=[{id:"none",name:"Dinheiro / outra"},{id:"itau",name:"Itaú"},{id:"bradesco",name:"Bradesco"},{id:"bb",name:"Banco do Brasil"},{id:"caixa",name:"Caixa"},{id:"santander",name:"Santander"},{id:"nubank",name:"Nubank"},{id:"inter",name:"Inter"},{id:"c6",name:"C6 Bank"},{id:"sicredi",name:"Sicredi"},{id:"sicoob",name:"Sicoob"},{id:"mercadopago",name:"Mercado Pago"},{id:"picpay",name:"PicPay"},{id:"other",name:"Outro banco"}] as const;
 function accountTypeLabel(type:AccountType){return ({CHECKING:"Conta corrente",SAVINGS:"Poupança",DIGITAL:"Conta digital",CASH:"Dinheiro",INVESTMENT:"Investimento"})[type]}
 function InstitutionMark({institution,name}:{institution?:string;name:string}){
- const meta=INSTITUTIONS.find(item=>item.id===institution)??INSTITUTIONS[0];
+ const normalizedName=name.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLocaleLowerCase("pt-BR");
+ const inferredId = normalizedName.includes("itau") ? "itau"
+   : normalizedName.includes("bradesco") ? "bradesco"
+   : normalizedName.includes("banco do brasil") || normalizedName === "bb" || normalizedName.includes(" bb ") ? "bb"
+   : normalizedName.includes("caixa") ? "caixa"
+   : normalizedName.includes("santander") ? "santander"
+   : normalizedName.includes("nubank") || normalizedName === "nu" ? "nubank"
+   : normalizedName.includes("inter") ? "inter"
+   : normalizedName.includes("c6") ? "c6"
+   : normalizedName.includes("sicredi") ? "sicredi"
+   : normalizedName.includes("sicoob") ? "sicoob"
+   : normalizedName.includes("mercado pago") || normalizedName.includes("mercadopago") ? "mercadopago"
+   : normalizedName.includes("picpay") ? "picpay"
+   : undefined;
+ const preferredId = (!institution || institution === "none" || institution === "other") && inferredId ? inferredId : institution;
+ const meta=INSTITUTIONS.find(item=>item.id===preferredId)??INSTITUTIONS[0];
  const id=meta.id;
  return <span className={`institution-mark institution-${id}`} role="img" aria-label={meta.name} title={meta.name}>
    {id==="bb"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M3 16 13 4h9L12 16l10 12h-9z" fill="#003da5"/><path d="M37 16 27 4h-9l10 12-10 12h9z" fill="#ffdf00"/></svg>
