@@ -627,7 +627,7 @@ function Recurring({data,onChange,embedded=false,onCreated,onCancel}:{data:Entit
    try{const horizon=new Date();horizon.setMonth(horizon.getMonth()+12);const through=`${horizon.getFullYear()}-${String(horizon.getMonth()+1).padStart(2,"0")}-${String(horizon.getDate()).padStart(2,"0")}`;const result=generateRecurringTransactions(data,rule,through);await onChange(result.data)}catch(e){setError(e instanceof Error?e.message:"Não foi possível gerar os lançamentos.");}finally{setBusy(false)}
  }
  async function deactivate(rule:RecurringRule){
-   if(!confirm("Desativar esta recorrência? O histórico será preservado e as ocorrências futuras ainda pendentes/planejadas serão canceladas."))return;
+   if(!confirm("Desativar esta recorrência? O histórico será preservado; ocorrências futuras pendentes/planejadas geradas automaticamente serão canceladas, e exceções editadas individualmente serão mantidas."))return;
    setBusy(true);setError("");
    try{await onChange(deactivateRecurringRule(data,rule.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível desativar.")}finally{setBusy(false)}
  }
