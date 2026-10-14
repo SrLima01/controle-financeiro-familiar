@@ -552,3 +552,15 @@ html,body,#root{width:100%;max-width:100%;min-width:0;overflow-x:clip}
  .cashflow-summary-title{margin-top:14px}
 }
 :root[data-theme="dark"] .cashflow-summary-title strong{color:var(--text,#f1f4fa)}
+
+
+/* Formulários de cadastro: fluxo dedicado, sem a lista atrás do formulário */
+.full-screen-form-page{min-height:calc(100vh - 64px);padding-bottom:calc(100px + env(safe-area-inset-bottom));}
+.full-screen-form-page .page-heading{align-items:flex-start;gap:12px;}
+.full-screen-form-page .page-heading>button{flex-shrink:0;margin-top:4px;}
+.form-intro{margin:6px 0 0;color:var(--muted,#697386);font-size:13px;line-height:1.45;max-width:48ch;}
+.full-screen-form-page .form-panel{width:100%;max-width:760px;margin:0 auto;}
+.global-alert{display:flex;align-items:flex-start;gap:10px;border:1px solid #f2c7c7;border-left:4px solid #d14343;background:linear-gradient(135deg,#fff7f7,#fff0f0);color:#842929;box-shadow:0 5px 18px rgba(130,41,41,.07);padding:14px 16px;line-height:1.5;font-weight:600;}
+.global-alert::before{content:"!";display:grid;place-items:center;flex:0 0 22px;width:22px;height:22px;border-radius:50%;background:#d14343;color:#fff;font-size:14px;font-weight:900;margin-top:1px;}
+:root[data-theme="dark"] .global-alert{background:linear-gradient(135deg,#351f27,#2b1c24);border-color:#63313b;border-left-color:#f87171;color:#fecaca;box-shadow:0 5px 18px rgba(0,0,0,.15);}
+:root[data-theme="dark"] .global-alert::before{background:#f87171;color:#241218;}
