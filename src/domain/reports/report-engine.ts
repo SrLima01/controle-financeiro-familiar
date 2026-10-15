@@ -13,6 +13,7 @@ function includedStatus(t:Transaction,mode:ReportMode){
   return validRealizedStatus||t.status==="PENDING"||t.status==="PLANNED";
 }
 function activeExpense(t:Transaction,mode:ReportMode){return t.type==="EXPENSE"&&includedStatus(t,mode)}
+function cashFlowDate(t:Transaction){if(t.type==="EXPENSE"&&t.creditCardId)return t.date;if(t.status==="PAID"||t.status==="RECEIVED")return t.paidDate??t.date;return t.dueDate??t.scheduledDate??t.date;}
 
 export function expensesByCategory(data:EntityCollection,month?:string,mode:ReportMode="REALIZED"):CategoryExpenseReport[]{
  const map=new Map<string,number>();
@@ -35,7 +36,7 @@ export function expensesByPerson(data:EntityCollection,month?:string,mode:Report
 export function cashFlow(data:EntityCollection,month:string,mode:ReportMode="REALIZED"){
  let income=0,expense=0,cardPayments=0;
  for(const t of data.transactions){
-  if(t.date.slice(0,7)!==month||!includedStatus(t,mode))continue;
+  if(cashFlowDate(t).slice(0,7)!==month||!includedStatus(t,mode))continue;
   if(t.type==="INCOME")income+=t.amountCents;
   else if(t.type==="EXPENSE"&& !t.creditCardId)expense+=t.amountCents;
   else if(t.type==="CARD_PAYMENT")cardPayments+=t.amountCents;
