@@ -7,7 +7,7 @@ const data: EntityCollection = {people:[],categories:[],accounts:[],cards:[],tra
 {id:"2",date:"2026-09-20",type:"EXPENSE",status:"PENDING",amountCents:15000,description:"Cartão",categoryId:"c",creditCardId:"card"},
 {id:"3",date:"2026-08-20",type:"EXPENSE",status:"PAID",amountCents:90000,description:"Fora do mês",categoryId:"c"},
 {id:"4",date:"2026-09-22",type:"EXPENSE",status:"CANCELLED",amountCents:50000,description:"Cancelada",categoryId:"c"}
-],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[budget]};
+],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[budget],debts:[]};
 describe("budget engine",()=>{
  it("counts only realized expenses by purchase month and excludes cancelled",()=>expect(getBudgetSpent(data,budget)).toBe(70000));
  it("does not count an expense with the income-only RECEIVED status",()=>{const d={...data,transactions:[...data.transactions,{id:"wrong-status",date:"2026-09-25",type:"EXPENSE" as const,status:"RECEIVED" as const,amountCents:40000,description:"Status inválido",categoryId:"c"}]};expect(getBudgetSpent(d,budget)).toBe(70000)});
