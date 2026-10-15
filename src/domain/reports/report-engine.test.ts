@@ -3,7 +3,7 @@ import { cashFlow, expensesByCategory } from "./report-engine";
 import type { EntityCollection } from "../../infrastructure/persistence/repository";
 
 const base:EntityCollection={
- people:[],categories:[{id:"cat",name:"Casa",kind:"EXPENSE",active:true}],accounts:[{id:"acc",name:"Conta",type:"CHECKING",openingBalanceCents:100000,active:true}],cards:[],transactions:[],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[]
+ people:[],categories:[{id:"cat",name:"Casa",kind:"EXPENSE",active:true}],accounts:[{id:"acc",name:"Conta",type:"CHECKING",openingBalanceCents:100000,active:true}],cards:[],transactions:[],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[],debts:[]
 };
 
 describe("report engine",()=>{
