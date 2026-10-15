@@ -26,7 +26,7 @@ export function validateTransaction(tx:Transaction,data:FinancialData):void{
  assertFinancialDate(tx.date);
  if(tx.dueDate)assertFinancialDate(tx.dueDate);
  if(tx.paidDate)assertFinancialDate(tx.paidDate);
- if(tx.paidDate&&tx.status!=="PAID"&&tx.status!=="RECEIVED")throw new Error("Only realized transactions may have a paidDate");
+ if(tx.paidDate&&tx.status!=="PAID"&&tx.status!=="RECEIVED"&&tx.status!=="CANCELLED")throw new Error("Only realized or cancelled transactions may have a paidDate");
  assertNonNegativeCents(tx.amountCents);
  if(tx.amountCents<=0)throw new Error("Transaction amount must be greater than zero");
  if(!tx.description.trim())throw new Error("Transaction description is required");
