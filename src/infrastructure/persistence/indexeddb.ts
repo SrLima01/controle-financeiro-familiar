@@ -1,10 +1,10 @@
-import type { Account, Category, CreditCard, InstallmentGroup, Person, Pot, PotMovement, RecurringRule, Transaction, Budget } from "../../domain/types/entities";
+import type { Account, Category, CreditCard, InstallmentGroup, Person, Pot, PotMovement, RecurringRule, Transaction, Budget, Debt } from "../../domain/types/entities";
 import type { EntityCollection, EntityMap, FinanceRepository, StoredEntity } from "./repository";
 
 const DB_NAME_PREFIX = "controle-financeiro-familiar";
 const LEGACY_DB_NAME = "controle-financeiro-familiar";
-const DB_VERSION = 4;
-const STORES = ["people", "categories", "accounts", "cards", "transactions", "installmentGroups", "recurringRules", "pots", "potMovements", "budgets"] as const;
+const DB_VERSION = 5;
+const STORES = ["people", "categories", "accounts", "cards", "transactions", "installmentGroups", "recurringRules", "pots", "potMovements", "budgets", "debts"] as const;
 const META_STORE = "syncMeta" as const;
 type StoreName = typeof STORES[number];
 type SyncStoreName = StoreName | typeof META_STORE;

@@ -226,6 +226,8 @@ export function calculateCardOutstanding(
 ): number {
   let purchases = 0;
   for (const tx of transactions) {
+    // Realized invoice debt only. Future planned installments reserve
+    // available credit separately in calculateCardAvailableLimit.
     if (tx.status === "PAID" && tx.creditCardId === card.id && tx.type === "EXPENSE") {
       purchases += tx.amountCents;
     }
@@ -242,12 +244,18 @@ export function calculateCardAvailableLimit(
   card: CreditCard,
   transactions: readonly Transaction[],
 ): number {
-  const available = Math.max(
-    0,
-    card.creditLimitCents -
-      calculateCardOutstanding(card, transactions) +
-      calculateCardCreditBalance(card, transactions),
-  );
+  // Available credit must reserve the full amount of every non-cancelled
+  // card purchase, including planned future installments. Invoice outstanding
+  // remains based on realized purchases only; these are separate concepts.
+  const committedPurchases = transactions
+    .filter(tx => tx.status !== "CANCELLED" && tx.creditCardId === card.id && tx.type === "EXPENSE")
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
+  // Only payments allocated to purchases restore the corresponding limit.
+  // Any excess remains a separate card credit; adding all payments here would
+  // count an advance payment twice when no eligible invoice exists yet.
+  const allocatedPayments = allocateCardPayments(card, transactions)
+    .reduce((sum, allocation) => sum + allocation.amountCents, 0);
+  const available = Math.max(0, card.creditLimitCents - Math.max(0, committedPurchases - allocatedPayments) + calculateCardCreditBalance(card, transactions));
   assertCents(available, "cardAvailableLimit");
   return available;
 }

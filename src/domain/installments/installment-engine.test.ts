@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "./installment-engine";
+import { buildInstallmentSet, cancelInstallments, deleteInstallmentGroup, getInstallmentNumber } from "./installment-engine";
 import type { EntityCollection } from "../../infrastructure/persistence/repository";
 import { calculateCardOutstanding, getCardInvoice } from "../cards/card-engine";
 
@@ -32,7 +32,8 @@ const makeData = (transactions: EntityCollection["transactions"], installmentGro
   recurringRules: [],
   pots: [],
   potMovements: [],
-  budgets: []
+  budgets: [],
+  debts: []
 });
 
 describe("installment engine", () => {
@@ -43,6 +44,8 @@ describe("installment engine", () => {
     expect(result.transactions.every(t => t.installmentGroupId === result.group.id)).toBe(true);
     expect(result.group.transactionIds).toEqual(result.transactions.map(t => t.id));
   });
+
+  it("deletes a complete installment group without leaving orphaned links", () => { const created=buildInstallmentSet(base); const unrelated={id:"unrelated",date:"2026-01-31",type:"EXPENSE" as const,status:"PAID" as const,amountCents:500,description:"Outro",accountId:"account-1"}; const next=deleteInstallmentGroup(makeData([...created.transactions,unrelated],[created.group]),created.group.id); expect(next.transactions).toEqual([unrelated]); expect(next.installmentGroups).toEqual([]); });
 
   it("rejects a zero-value parcelamento", () => {
     expect(() => buildInstallmentSet({ ...base, totalAmountCents: 0 })).toThrow("maior que zero");

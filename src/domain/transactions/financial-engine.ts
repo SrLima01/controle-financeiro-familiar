@@ -1,6 +1,6 @@
-import type{Account,CreditCard,Transaction,TransactionStatus,Category,Person}from"../types/entities";import{assertCents,assertNonNegativeCents}from"../money/cents";import{assertFinancialDate}from"../date/financial-date";
+import type{Account,CreditCard,Transaction,Category,Person}from"../types/entities";import{assertCents,assertNonNegativeCents}from"../money/cents";import{assertFinancialDate}from"../date/financial-date";
 export type FinancialData={accounts:readonly Account[];cards?:readonly CreditCard[];transactions:readonly Transaction[];categories?:readonly Category[];people?:readonly Person[]};
-const real=(s:TransactionStatus)=>s==="PAID"||s==="RECEIVED";
+const real=(tx:Transaction)=>tx.type==="INCOME"?tx.status==="RECEIVED":tx.status==="PAID";
 const hasAccount=(as:readonly Account[],id:string)=>as.some(a=>a.id===id);
 const hasCard=(cs:readonly CreditCard[],id:string)=>cs.some(c=>c.id===id);
 const hasId=(items:readonly {id:string}[],id:string)=>items.some(x=>x.id===id);
@@ -21,6 +21,8 @@ export function validateAccountUpdate(previous:Account,next:Account,transactions
 }
 export function validateTransaction(tx:Transaction,data:FinancialData):void{
  if(!tx.id)throw new Error("Transaction id is required");
+ const compatibleStatus=tx.status==="CANCELLED"||tx.status==="PENDING"||tx.status==="PLANNED"||(tx.type==="INCOME"?tx.status==="RECEIVED":tx.status==="PAID");
+ if(!compatibleStatus)throw new Error("Transaction status is incompatible with transaction type");
  assertFinancialDate(tx.date);
  assertNonNegativeCents(tx.amountCents);
  if(tx.amountCents<=0)throw new Error("Transaction amount must be greater than zero");
@@ -51,7 +53,8 @@ export function validateTransaction(tx:Transaction,data:FinancialData):void{
  if(tx.type==="EXPENSE"&&(tx.categoryId&&data.categories?.find(c=>c.id===tx.categoryId)?.kind==="INCOME"))throw new Error("Expense cannot use an income category");
 }
 export function validateAllTransactions(data:FinancialData):void{for(const tx of data.transactions)validateTransaction(tx,data)}
+export function validateTransactionCanEdit(tx:Transaction):void{if(tx.status==="CANCELLED")throw new Error("Lançamentos cancelados não podem ser reativados pela edição. Apague o lançamento individual se necessário ou registre um novo.");}
 function apply(tx:Transaction,id:string,b:number):number{if(tx.type==="INCOME"&&tx.accountId===id)return b+tx.amountCents;if(tx.type==="EXPENSE"&&tx.accountId===id)return b-tx.amountCents;if(tx.type==="TRANSFER"){if(tx.accountId===id)b-=tx.amountCents;if(tx.destinationAccountId===id)b+=tx.amountCents}if(tx.type==="CARD_PAYMENT"&&tx.accountId===id)b-=tx.amountCents;return b}
-export function calculateAccountBalance(accountId:string,data:FinancialData):number{const a=data.accounts.find(x=>x.id===accountId);if(!a)throw new Error("Unknown accountId");validateAllTransactions(data);let b=a.openingBalanceCents;for(const tx of data.transactions)if(real(tx.status))b=apply(tx,accountId,b);assertCents(b,"accountBalance");return b}
-export function calculateProjectedAccountBalance(accountId:string,data:FinancialData):number{const a=data.accounts.find(x=>x.id===accountId);if(!a)throw new Error("Unknown accountId");validateAllTransactions(data);let b=a.openingBalanceCents;for(const tx of data.transactions)if(tx.status!=="CANCELLED")b=apply(tx,accountId,b);assertCents(b,"projectedAccountBalance");return b}
+export function calculateAccountBalance(accountId:string,data:FinancialData):number{const a=data.accounts.find(x=>x.id===accountId);if(!a)throw new Error("Unknown accountId");validateAllTransactions(data);let b=a.openingBalanceCents;for(const tx of data.transactions)if(real(tx))b=apply(tx,accountId,b);assertCents(b,"accountBalance");return b}
+export function calculateProjectedAccountBalance(accountId:string,data:FinancialData):number{const a=data.accounts.find(x=>x.id===accountId);if(!a)throw new Error("Unknown accountId");validateAllTransactions(data);let b=a.openingBalanceCents;for(const tx of data.transactions)if(tx.status!=="CANCELLED"&&(tx.status==="PENDING"||tx.status==="PLANNED"||real(tx)))b=apply(tx,accountId,b);assertCents(b,"projectedAccountBalance");return b}
 export function calculateTotalRealBalance(data:FinancialData):number{return data.accounts.filter(a=>a.active).reduce((s,a)=>s+calculateAccountBalance(a.id,data),0)}

@@ -197,7 +197,7 @@ describe("card engine", () => {
     ];
 
     expect(calculateCardOutstanding(card, transactions)).toBe(30000);
-    expect(calculateCardAvailableLimit(card, transactions)).toBe(70000);
+    expect(calculateCardAvailableLimit(card, transactions)).toBe(50000);
   });
 
   it("does not expose a negative available limit when debt exceeds the current limit", () => {

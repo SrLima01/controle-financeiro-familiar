@@ -5,27 +5,27 @@ import type { User } from "@supabase/supabase-js";
 import type { EntityCollection } from "../infrastructure/persistence/repository";
 import type { Person, Category } from "../domain/types/entities";
 import { IndexedDbFinanceRepository, hasLegacyDatabase, readLegacyLocalData } from "../infrastructure/persistence/indexeddb";
-import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateAccountArchive, validateAccountUpdate, validateTransaction } from "../domain/transactions/financial-engine";
+import { calculateProjectedAccountBalance, calculateTotalRealBalance, validateAccountArchive, validateAccountUpdate, validateTransaction, validateTransactionCanEdit } from "../domain/transactions/financial-engine";
 import { calculateCardAvailableLimit, calculateCardCreditBalance, calculateCardOutstanding, getCardInvoice, allocateCardPayments, invoiceClosingDate, invoiceDueDateFromClosing, validateCreditCard, validateCreditCardArchive, validateCreditCardUpdate } from "../domain/cards/card-engine";
 import { getAuthState, onAuthStateChange, signInWithEmail, signOut, signUpWithEmail } from "../infrastructure/supabase/auth";
-import { createFamily, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
+import { createFamily, ensurePersonalSpace, joinFamily, listMyFamilies, type Family } from "../infrastructure/supabase/family";
 import { pullFinanceState } from "../infrastructure/supabase/sync";
 import { pushFromLocalFirst } from "../infrastructure/supabase/sync-coordinator";
 import type { Account, AccountType, CreditCard, Transaction, TransactionStatus, TransactionType } from "../domain/types/entities";
 import { assertCents } from "../domain/money/cents";
-import { buildInstallmentSet, cancelInstallments, getInstallmentNumber } from "../domain/installments/installment-engine";
-import { applyRecurringOccurrenceEdit, applyRecurringRuleToFutureTransactions, createRecurringRule, deactivateRecurringRule, generateRecurringTransactions, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
+import { buildInstallmentSet, cancelInstallments, deleteInstallmentGroup, getInstallmentNumber } from "../domain/installments/installment-engine";
+import { applyRecurringOccurrenceEdit, applyRecurringRuleToFutureTransactions, createRecurringRule, deactivateRecurringRule, deleteRecurringOccurrence, deleteRecurringRuleAndOccurrences, generateRecurringTransactions, getRecurringScheduledDate, validateRecurringRuleUpdate, validateRecurringTransactionUpdate } from "../domain/recurring/recurring-engine";
 import { archivePot, createPot, createPotMovement, getFreeCash, getPotBalance, getTotalReserved } from "../domain/pots/pot-engine";
 import { createBudget, getBudgetSpent, getBudgetStatus } from "../domain/budgets/budget-engine";
 import { cashFlow, expensesByCategory, expensesByPerson, incomeByCategory, monthlyExpenses } from "../domain/reports/report-engine";
-import type { Budget, Pot, RecurringFrequency, RecurringRule } from "../domain/types/entities";
+import type { Budget, Debt, DebtPriority, Pot, RecurringFrequency, RecurringRule } from "../domain/types/entities";
 import { exportJson, exportTransactionsCsv, importJson } from "../infrastructure/persistence/export";
 import { analyzeFinances } from "../domain/assistant/assistant-engine";
 import { parseSmartAmount, parseSmartInput, type SmartDraft } from "../domain/smart-input/smart-parser";
 import { extractReceiptDate, extractReceiptMerchant, extractReceiptTotal, recognizeReceipt } from "../infrastructure/ocr/receipt-ocr";
 
 type Page = "dashboard" | "contas" | "transacoes" | "cartoes" | "mais" | "relatorios";
-const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [], budgets: [] };
+const emptyData: EntityCollection = { people: [], categories: [], accounts: [], cards: [], transactions: [], installmentGroups: [], recurringRules: [], pots: [], potMovements: [], budgets: [], debts: [] };
 
 function money(cents:number) {
   return new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" }).format(cents / 100);
@@ -64,6 +64,8 @@ function projectedAccountBalanceUntil(accountId:string,data:EntityCollection,thr
   let balance=account.openingBalanceCents;
   for(const tx of data.transactions) {
     if(tx.status==="CANCELLED" || (throughDate && tx.date>throughDate)) continue;
+    const validStatus=tx.status==="PENDING"||tx.status==="PLANNED"||(tx.type==="INCOME"?tx.status==="RECEIVED":tx.status==="PAID");
+    if(!validStatus) continue;
     if(tx.type==="INCOME" && tx.accountId===accountId) balance+=tx.amountCents;
     if(tx.type==="EXPENSE" && tx.accountId===accountId) balance-=tx.amountCents;
     if(tx.type==="TRANSFER") {
@@ -75,31 +77,55 @@ function projectedAccountBalanceUntil(accountId:string,data:EntityCollection,thr
   return balance;
 }
 
+
+function BoatMark({ className = "" }:{className?:string}) {
+  return <svg className={className} viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+    <path d="M48 15V72L19 72Z" fill="currentColor"/>
+    <path d="M53 29 83 70H53Z" fill="#7DD3C7"/>
+    <path d="M12 76Q29 84 47 77T84 77" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round"/>
+    <path d="M18 85Q35 92 52 85T82 85" fill="none" stroke="#7DD3C7" strokeWidth="3" strokeLinecap="round"/>
+  </svg>;
+}
+
+function SplashScreen() {
+  return <main className="splash-screen" aria-label="Leme Familiar, iniciando">
+    <div className="splash-brand">
+      <div className="splash-emblem"><BoatMark className="splash-boat"/></div>
+      <div className="splash-wordmark">LEME <span>FAMILIAR</span></div>
+      <p>A direção financeira da sua família.</p>
+    </div>
+    <div className="splash-horizon" aria-hidden="true"><span/></div>
+    <span className="splash-loading" aria-hidden="true"/>
+  </main>;
+}
+
 function AuthScreen({ onAuthenticated }:{onAuthenticated:(user:User)=>void}) {
   const [mode,setMode] = useState<"login"|"signup">("login");
   const [email,setEmail] = useState("");
   const [password,setPassword] = useState("");
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
+  const [notice,setNotice] = useState("");
   async function submit(e:FormEvent) {
-    e.preventDefault(); setBusy(true); setError("");
+    e.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
       const result = mode==="login" ? await signInWithEmail(email,password) : await signUpWithEmail(email,password);
       if (result.session && result.user) onAuthenticated(result.user);
-      else setError("Cadastro realizado. Confirme o e-mail antes de entrar.");
+      else setNotice("Cadastro realizado. Confira sua caixa de entrada e confirme o e-mail antes de entrar.");
     } catch (err) { setError(err instanceof Error ? err.message : "Não foi possível concluir."); }
     finally { setBusy(false); }
   }
   return <main className="auth-page"><section className="panel auth-panel">
-    <div className="brand-mark">CF</div><h1>Controle Financeiro Familiar</h1>
-    <p className="muted">Suas finanças, com histórico e sincronização familiar.</p>
+    <div className="brand-mark" aria-hidden="true"><BoatMark /></div><h1>LEME FAMILIAR</h1>
+    <p className="muted">A direção financeira da sua família.</p>
     <form onSubmit={submit} className="form-stack">
       <label>E-mail<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email"/></label>
       <label>Senha<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={6} autoComplete={mode==="login"?"current-password":"new-password"}/></label>
-      {error && <div className="alert error">{error}</div>}
+      {error && <div className="alert error" role="alert">{error}</div>}
+      {notice && <div className="alert success" role="status">{notice}</div>}
       <button className="primary" disabled={busy}>{busy ? "Aguarde…" : mode==="login" ? "Entrar" : "Criar conta"}</button>
     </form>
-    <button className="link-button" onClick={()=>{setMode(mode==="login"?"signup":"login");setError("")}}>
+    <button className="link-button" onClick={()=>{setMode(mode==="login"?"signup":"login");setError("");setNotice("")}}>
       {mode==="login" ? "Ainda não tenho conta" : "Já tenho uma conta"}
     </button>
   </section></main>;
@@ -117,9 +143,20 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
     setLoadingFamilies(true);
     setError("");
     try {
-      setFamilies(await listMyFamilies());
+      const available = await listMyFamilies();
+      if (available.length === 0) {
+        const personalId = await ensurePersonalSpace();
+        const refreshed = await listMyFamilies();
+        const personalSpace = refreshed.find(f => f.id === personalId) ?? refreshed[0];
+        if (!personalSpace) {
+          throw new Error("Seu espaço individual foi inicializado, mas não apareceu na lista. Tente carregar novamente.");
+        }
+        onReady(personalSpace);
+        return;
+      }
+      setFamilies(available);
     } catch(e) {
-      setError(e instanceof Error ? e.message : "Não foi possível carregar as famílias.");
+      setError(e instanceof Error ? e.message : "Não foi possível carregar seus espaços financeiros.");
     } finally {
       setLoadingFamilies(false);
     }
@@ -134,7 +171,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
       const id=await createFamily(name.trim());
       const created=(await listMyFamilies()).find(f=>f.id===id);
       if(created) onReady(created);
-      else setError("Família criada, mas não foi possível carregar seus dados.");
+      else setError("Espaço criado, mas não foi possível carregar seus dados.");
     } catch(e) {
       setError(e instanceof Error?e.message:"Não foi possível criar.");
     } finally {setBusy(false);}
@@ -147,7 +184,7 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
       const id=await joinFamily(code.trim().toUpperCase());
       const found=(await listMyFamilies()).find(f=>f.id===id);
       if(found) onReady(found);
-      else setError("Família vinculada, mas não foi possível carregar seus dados.");
+      else setError("Espaço vinculado, mas não foi possível carregar seus dados.");
     } catch(e) {
       setError(e instanceof Error?e.message:"Não foi possível entrar.");
     } finally {setBusy(false);}
@@ -159,14 +196,14 @@ function FamilyScreen({ user, onReady }:{user:User;onReady:(family:Family)=>void
       <strong>{user.email ?? "E-mail não disponível"}</strong>
       <button className="link-button" type="button" onClick={()=>void signOut()}>Sair</button>
     </div>
-    <h1>Escolha sua família</h1>
-    <p className="muted">A família define o conjunto financeiro que será sincronizado entre os aparelhos.</p>
-    {loadingFamilies && <div className="loading">Carregando suas famílias…</div>}
-    {!loadingFamilies && families.length>0 && <div className="family-list">{families.map(f=><button key={f.id} className="family-card" onClick={()=>onReady(f)}><strong>{f.name}</strong><span>Família sincronizada</span></button>)}</div>}
+    <h1>Escolha seu espaço financeiro</h1>
+    <p className="muted">Cada espaço financeiro reúne os dados que serão sincronizados entre os aparelhos.</p>
+    {loadingFamilies && <div className="loading">Carregando seus espaços financeiros…</div>}
+    {!loadingFamilies && families.length>0 && <div className="family-list">{families.map(f=><button key={f.id} className="family-card" onClick={()=>onReady(f)}><strong>{f.name}</strong><span>Espaço sincronizado</span></button>)}</div>}
     <div className="split-line"><span>ou</span></div>
-    <h2>Criar nova família</h2>
+    <h2>Criar outro espaço financeiro</h2>
     <div className="inline-form"><input placeholder="Ex.: Nossa casa" value={name} onChange={e=>setName(e.target.value)} disabled={busy}/><button className="primary" disabled={busy||!name.trim()} onClick={create}>Criar</button></div>
-    <h2>Entrar com código</h2>
+    <h2>Entrar em espaço compartilhado</h2>
     <div className="inline-form"><input placeholder="Código de convite" value={code} onChange={e=>setCode(e.target.value)} disabled={busy}/><button className="secondary" disabled={busy||!code.trim()} onClick={join}>Entrar</button></div>
     {error && <div className="alert error">{error}<button className="link-button" type="button" onClick={()=>void loadFamilies()}>Tentar novamente</button></div>}
   </section></main>;
@@ -184,7 +221,7 @@ function Dashboard({data,onChange,onQuickAction,hideValues,onToggleHideValues,sy
   const projected=useMemo(()=>data.accounts.filter(a=>a.active).reduce((sum,a)=>sum+projectedAccountBalanceUntil(a.id,data,throughDate),0),[data,throughDate]);
   const planned=useMemo(()=>data.transactions
     .filter(t=>(planningPeriod==="ALL"||t.date.startsWith(planningPeriod))&&(t.status==="PENDING"||t.status==="PLANNED"))
-    .reduce((sum,t)=>sum+(t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0),[data.transactions,planningPeriod]);
+    .reduce((sum,t)=>sum+((t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0),[data.transactions,planningPeriod]);
   const monthKey=currentMonthKey();
   const realizedIncome=useMemo(()=>data.transactions.filter(t=>t.date.startsWith(monthKey)&&t.type==="INCOME"&&t.status==="RECEIVED").reduce((sum,t)=>sum+t.amountCents,0),[data.transactions,monthKey]);
   const realizedExpense=useMemo(()=>data.transactions.filter(t=>t.date.startsWith(monthKey)&&t.type==="EXPENSE"&&t.status==="PAID").reduce((sum,t)=>sum+t.amountCents,0),[data.transactions,monthKey]);
@@ -246,23 +283,108 @@ function Dashboard({data,onChange,onQuickAction,hideValues,onToggleHideValues,sy
 
 function Empty({text}:{text:string}) { return <div className="empty">{text}</div>; }
 
+function styledConfirm(message:string,title="Confirmar ação",confirmLabel="Confirmar"):Promise<boolean>{
+  return new Promise(resolve=>{
+    const backdrop=document.createElement("div");
+    backdrop.className="app-dialog-backdrop";
+    backdrop.setAttribute("role","presentation");
+    const dialog=document.createElement("section");
+    dialog.className="app-dialog";
+    dialog.setAttribute("role","alertdialog");
+    dialog.setAttribute("aria-modal","true");
+    const symbol=document.createElement("div");
+    symbol.className="app-dialog-symbol";
+    symbol.textContent="!";
+    const heading=document.createElement("h2");
+    heading.textContent=title;
+    const copy=document.createElement("p");
+    copy.textContent=message;
+    const actions=document.createElement("div");
+    actions.className="app-dialog-actions";
+    const cancel=document.createElement("button");
+    cancel.type="button";
+    cancel.className="secondary";
+    cancel.textContent="Voltar";
+    const confirmButton=document.createElement("button");
+    confirmButton.type="button";
+    confirmButton.className="primary app-dialog-danger";
+    confirmButton.textContent=confirmLabel;
+    let settled=false;
+    const finish=(value:boolean)=>{
+      if(settled)return;
+      settled=true;
+      document.removeEventListener("keydown",onKeyDown);
+      backdrop.remove();
+      resolve(value);
+    };
+    const onKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape")finish(false);};
+    cancel.addEventListener("click",()=>finish(false));
+    confirmButton.addEventListener("click",()=>finish(true));
+    backdrop.addEventListener("click",event=>{if(event.target===backdrop)finish(false);});
+    actions.append(cancel,confirmButton);
+    dialog.append(symbol,heading,copy,actions);
+    backdrop.append(dialog);
+    document.body.append(backdrop);
+    document.addEventListener("keydown",onKeyDown);
+    cancel.focus();
+  });
+}
+function styledNotice(message:string,title="Aviso",buttonLabel="Entendi"):Promise<void>{
+  return new Promise(resolve=>{
+    const backdrop=document.createElement("div");
+    backdrop.className="app-dialog-backdrop";
+    backdrop.setAttribute("role","presentation");
+    const dialog=document.createElement("section");
+    dialog.className="app-dialog";
+    dialog.setAttribute("role","dialog");
+    dialog.setAttribute("aria-modal","true");
+    const symbol=document.createElement("div");
+    symbol.className="app-dialog-symbol app-dialog-info";
+    symbol.textContent="i";
+    const heading=document.createElement("h2");
+    heading.textContent=title;
+    const copy=document.createElement("p");
+    copy.textContent=message;
+    const actions=document.createElement("div");
+    actions.className="app-dialog-actions app-dialog-actions-end";
+    const close=document.createElement("button");
+    close.type="button";
+    close.className="primary";
+    close.textContent=buttonLabel;
+    const finish=()=>{document.removeEventListener("keydown",onKeyDown);backdrop.remove();resolve();};
+    const onKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape")finish();};
+    close.addEventListener("click",finish);
+    backdrop.addEventListener("click",event=>{if(event.target===backdrop)finish();});
+    actions.append(close);
+    dialog.append(symbol,heading,copy,actions);
+    backdrop.append(dialog);
+    document.body.append(backdrop);
+    document.addEventListener("keydown",onKeyDown);
+    close.focus();
+  });
+}
+
+
 function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
   const [editing,setEditing]=useState<Account|null>(null);
   const [name,setName]=useState(""); const [type,setType]=useState<AccountType>("CHECKING"); const [opening,setOpening]=useState(""); const [institution,setInstitution]=useState("none");
-  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
-  function reset(){setEditing(null);setName("");setType("CHECKING");setOpening("");setInstitution("none");setError("");}
-  function edit(a:Account){setEditing(a);setName(a.name);setType(a.type);setOpening((a.openingBalanceCents/100).toFixed(2).replace(".",","));setInstitution(a.institution??"none");setError("");}
+  const [ownerPersonId,setOwnerPersonId]=useState(""); const [holderName,setHolderName]=useState(""); const [pixKeyType,setPixKeyType]=useState<"CPF"|"PHONE"|"EMAIL"|"RANDOM"|"OTHER">("CPF"); const [pixKey,setPixKey]=useState(""); const [agency,setAgency]=useState(""); const [accountNumber,setAccountNumber]=useState(""); const [accountDigit,setAccountDigit]=useState(""); const [expandedAccountId,setExpandedAccountId]=useState<string|null>(null); const [copied,setCopied]=useState("");
+  const [busy,setBusy]=useState(false); const [error,setError]=useState(""); const [formOpen,setFormOpen]=useState(false);
+  function reset(){setEditing(null);setName("");setType("CHECKING");setOpening("");setInstitution("none");setOwnerPersonId("");setHolderName("");setPixKeyType("CPF");setPixKey("");setAgency("");setAccountNumber("");setAccountDigit("");setError("");setFormOpen(false);}
+  function openNew(){reset();setFormOpen(true);}
+  function edit(a:Account){setEditing(a);setName(a.name);setType(a.type);setOpening((a.openingBalanceCents/100).toFixed(2).replace(".",","));setInstitution(a.institution??"none");setOwnerPersonId(a.ownerPersonId??"");setHolderName(a.holderName??"");setPixKeyType(a.pixKeyType??"CPF");setPixKey(a.pixKey??"");setAgency(a.agency??"");setAccountNumber(a.accountNumber??"");setAccountDigit(a.accountDigit??"");setError("");setFormOpen(true);}
+  async function copyAccountValue(value:string,label:string){try{await navigator.clipboard.writeText(value);setCopied(label);}catch{setError("Não foi possível copiar automaticamente. Selecione e copie o dado manualmente.");}}
   async function save(){
     setError(""); const value=Number(opening.replace(/\\./g,"").replace(",","."));
     if(!name.trim()||!Number.isFinite(value)||value<0){setError("Informe nome e saldo inicial válido.");return;}
     const cents=Math.round(value*100); try{assertCents(cents,"openingBalanceCents")}catch(e){setError(e instanceof Error?e.message:"Valor inválido.");return;}
-    const account:Account={id:editing?.id ?? crypto.randomUUID(),name:name.trim(),type,openingBalanceCents:cents,active:true,institution};
+    const account:Account={id:editing?.id ?? crypto.randomUUID(),name:name.trim(),type,openingBalanceCents:cents,active:true,institution,ownerPersonId:ownerPersonId||undefined,holderName:holderName.trim()||undefined,pixKeyType:pixKey?pixKeyType:undefined,pixKey:pixKey.trim()||undefined,agency:agency.trim()||undefined,accountNumber:accountNumber.trim()||undefined,accountDigit:accountDigit.trim()||undefined};
     if(editing) validateAccountUpdate(editing,account,data.transactions);
     const next={...data,accounts:editing?data.accounts.map(a=>a.id===account.id?account:a):[...data.accounts,account]};
     setBusy(true);try{await onChange(next);reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false);}
   }
   async function archive(a:Account){
-    if(!confirm("Arquivar a conta \"" + a.name + "\"? O histórico será preservado."))return;
+    if(!await styledConfirm("Arquivar a conta \"" + a.name + "\"? O histórico será preservado."))return;
     try{validateAccountArchive(a,{accounts:data.accounts,cards:data.cards,transactions:data.transactions},data.recurringRules)}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");return;}
     setBusy(true);setError("");try{await onChange({...data,accounts:data.accounts.map(x=>x.id===a.id?{...x,active:false}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");}finally{setBusy(false);}
   }
@@ -272,39 +394,62 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
     catch(e){setError(e instanceof Error?e.message:"Não foi possível reativar a conta.");}
     finally{setBusy(false)}
   }
-  return <div className="page-content">
-    <div className="page-heading"><div><span className="eyebrow">Patrimônio</span><h1>Contas</h1></div><button className="primary compact" onClick={reset}>+ Nova conta</button></div>
+  if(formOpen) return <div className="page-content full-screen-form-page">
+    <div className="page-heading"><div><span className="eyebrow">Patrimônio</span><h1>{editing?"Editar conta":"Nova conta"}</h1><p className="form-intro">Preencha os dados e salve para voltar à lista de contas.</p></div><button className="secondary compact" type="button" onClick={reset}>← Voltar</button></div>
     {error&&<div className="global-alert">{error}</div>}
-    <section className="panel account-list">{data.accounts.filter(a=>a.active).length===0?<Empty text="Nenhuma conta ativa. Cadastre a primeira conta para começar."/>:data.accounts.filter(a=>a.active).map(a=><div className="account-row account-management-row" key={a.id}><div className="account-identity"><InstitutionMark institution={a.institution} name={a.name}/><span className="account-name-group"><strong>{a.name}</strong><small>{accountTypeLabel(a.type)} · Saldo inicial {money(a.openingBalanceCents)}</small></span></div><div className="row-actions"><strong>{money(calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}))}</strong><button className="link-button" onClick={()=>edit(a)}>Editar</button><button className="link-button danger" onClick={()=>void archive(a)} disabled={busy}>Arquivar</button></div></div>)}</section>
-    {data.accounts.some(a=>!a.active)&&<section className="panel archived-panel"><div className="section-title"><div><h2>Contas arquivadas</h2><span>O histórico permanece preservado.</span></div></div><div className="account-list">{data.accounts.filter(a=>!a.active).map(a=><div className="account-row account-management-row" key={a.id}><div className="account-identity"><InstitutionMark institution={a.institution} name={a.name}/><span className="account-name-group"><strong>{a.name}</strong><small>{accountTypeLabel(a.type)} · Saldo inicial {money(a.openingBalanceCents)}</small></span></div><button className="secondary compact" disabled={busy} onClick={()=>void reactivate(a)}>Reativar</button></div>)}</div></section>}
-    <section className="panel form-panel"><h2>{editing?"Editar conta":"Nova conta"}</h2>
+<section className="panel form-panel"><h2>{editing?"Editar conta":"Nova conta"}</h2>
       <div className="form-grid"><label>Nome<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Banco principal"/></label>
       <label>Tipo<select value={type} onChange={e=>setType(e.target.value as AccountType)}><option value="CHECKING">Conta corrente</option><option value="SAVINGS">Poupança</option><option value="DIGITAL">Conta digital</option><option value="CASH">Dinheiro</option><option value="INVESTMENT">Investimento</option></select></label>
-      <label>Instituição<select value={institution} onChange={e=>setInstitution(e.target.value)}>{INSTITUTIONS.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Saldo inicial<input inputMode="decimal" value={opening} onChange={e=>setOpening(e.target.value)} placeholder="0,00"/></label></div>
+      <label>Instituição<select value={institution} onChange={e=>setInstitution(e.target.value)}>{INSTITUTIONS.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Saldo inicial<input inputMode="decimal" value={opening} onChange={e=>setOpening(e.target.value)} placeholder="0,00"/></label><label>Titular / pessoa<select value={ownerPersonId} onChange={e=>setOwnerPersonId(e.target.value)}><option value="">Não vincular a uma pessoa</option>{data.people.filter(p=>p.active).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Nome do titular (opcional)<input value={holderName} onChange={e=>setHolderName(e.target.value)} placeholder="Nome como aparece no banco"/></label><label>Tipo de chave Pix<select value={pixKeyType} onChange={e=>setPixKeyType(e.target.value as typeof pixKeyType)}><option value="CPF">CPF</option><option value="PHONE">Telefone</option><option value="EMAIL">E-mail</option><option value="RANDOM">Aleatória</option><option value="OTHER">Outra</option></select></label><label>Chave Pix<input value={pixKey} onChange={e=>setPixKey(e.target.value)} placeholder="Digite a chave Pix"/></label><label>Agência<input value={agency} onChange={e=>setAgency(e.target.value)} placeholder="Número da agência"/></label><label>Número da conta<input value={accountNumber} onChange={e=>setAccountNumber(e.target.value)} placeholder="Número da conta"/></label><label>Dígito da conta<input value={accountDigit} onChange={e=>setAccountDigit(e.target.value)} placeholder="Dígito"/></label></div><p className="form-note">Não cadastre senhas, códigos de autenticação ou dados de acesso ao banco. As informações inseridas aqui ficam disponíveis aos membros autorizados deste espaço financeiro.</p>
       <div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Criar conta"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div>
     </section>
+  </div>;
+  return <div className="page-content">
+    <div className="page-heading"><div><span className="eyebrow">Patrimônio</span><h1>Contas</h1></div><button className="primary compact" onClick={openNew}>+ Nova conta</button></div>
+    {error&&<div className="global-alert">{error}</div>}
+    <section className="panel account-list">{data.accounts.filter(a=>a.active).length===0?<Empty text="Nenhuma conta ativa. Cadastre a primeira conta para começar."/>:data.accounts.filter(a=>a.active).map(a=>{const owner=data.people.find(p=>p.id===a.ownerPersonId);return <article className="account-details-card" key={a.id}><div className="account-row account-management-row"><div className="account-identity"><InstitutionMark institution={a.institution} name={a.name}/><span className="account-name-group"><strong>{a.name}</strong><small>{accountTypeLabel(a.type)} · {owner?.name??a.holderName??"Titular não informado"}</small></span></div><div className="row-actions"><strong>{money(calculateProjectedAccountBalance(a.id,{accounts:data.accounts,cards:data.cards,transactions:data.transactions}))}</strong><button className="link-button" onClick={()=>edit(a)}>Editar</button><button className="link-button" onClick={()=>setExpandedAccountId(expandedAccountId===a.id?null:a.id)}>{expandedAccountId===a.id?"Ocultar dados":"Ver dados"}</button><button className="link-button danger" onClick={()=>void archive(a)} disabled={busy}>Arquivar</button></div></div>{expandedAccountId===a.id&&<div className="account-sensitive-details"><p><strong>Titular:</strong> {owner?.name??a.holderName??"Não informado"}</p>{a.pixKey&&<div className="account-copy-row"><span><small>Chave Pix ({({CPF:"CPF",PHONE:"telefone",EMAIL:"e-mail",RANDOM:"aleatória",OTHER:"outra"} as const)[a.pixKeyType??"CPF"]})</small><strong>{a.pixKey}</strong></span><button className="secondary compact" onClick={()=>void copyAccountValue(a.pixKey!,"Chave Pix")}>{copied==="Chave Pix"?"Copiado!":"Copiar Pix"}</button></div>}{(a.agency||a.accountNumber)&&<div className="account-copy-row"><span><small>Agência e conta</small><strong>{a.agency?`Agência ${a.agency}`:""}{a.agency&&a.accountNumber?" · ":""}{a.accountNumber?`Conta ${a.accountNumber}${a.accountDigit?`-${a.accountDigit}`:""}`:""}</strong></span><button className="secondary compact" onClick={()=>void copyAccountValue([a.agency?`Agência: ${a.agency}`:"",a.accountNumber?`Conta: ${a.accountNumber}${a.accountDigit?`-${a.accountDigit}`:""}`:""].filter(Boolean).join(" · "),"Conta bancária")}>{copied==="Conta bancária"?"Copiado!":"Copiar dados"}</button></div>}{!a.pixKey&&!a.agency&&!a.accountNumber&&<p className="muted">Ainda não há chave Pix ou dados de agência/conta cadastrados.</p>}{copied&&<small role="status">{copied} copiado para a área de transferência.</small>}</div>}</article>})}</section>
+    {data.accounts.some(a=>!a.active)&&<section className="panel archived-panel"><div className="section-title"><div><h2>Contas arquivadas</h2><span>O histórico permanece preservado.</span></div></div><div className="account-list">{data.accounts.filter(a=>!a.active).map(a=><div className="account-row account-management-row" key={a.id}><div className="account-identity"><InstitutionMark institution={a.institution} name={a.name}/><span className="account-name-group"><strong>{a.name}</strong><small>{accountTypeLabel(a.type)} · Saldo inicial {money(a.openingBalanceCents)}</small></span></div><button className="secondary compact" disabled={busy} onClick={()=>void reactivate(a)}>Reativar</button></div>)}</div></section>}
+    
   </div>;
 }
 
 const INSTITUTIONS=[{id:"none",name:"Dinheiro / outra"},{id:"itau",name:"Itaú"},{id:"bradesco",name:"Bradesco"},{id:"bb",name:"Banco do Brasil"},{id:"caixa",name:"Caixa"},{id:"santander",name:"Santander"},{id:"nubank",name:"Nubank"},{id:"inter",name:"Inter"},{id:"c6",name:"C6 Bank"},{id:"sicredi",name:"Sicredi"},{id:"sicoob",name:"Sicoob"},{id:"mercadopago",name:"Mercado Pago"},{id:"picpay",name:"PicPay"},{id:"other",name:"Outro banco"}] as const;
+// SVGs de marcas bancárias servidos pelo projeto react-bancos; mantemos fallback local caso a imagem falhe.
+const REAL_LOGO_SLUGS:Record<string,string>={itau:"itau",bradesco:"bradesco",bb:"bancodobrasil",caixa:"caixa",santander:"santander",nubank:"nubank",inter:"inter",c6:"c6bank",sicredi:"sicredi",sicoob:"sicoob",mercadopago:"mercadopago",picpay:"picpay"};
 function accountTypeLabel(type:AccountType){return ({CHECKING:"Conta corrente",SAVINGS:"Poupança",DIGITAL:"Conta digital",CASH:"Dinheiro",INVESTMENT:"Investimento"})[type]}
 function InstitutionMark({institution,name}:{institution?:string;name:string}){
- const meta=INSTITUTIONS.find(item=>item.id===institution)??INSTITUTIONS[0];
+ const normalizedName=name.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLocaleLowerCase("pt-BR");
+ const inferredId = normalizedName.includes("itau") ? "itau"
+   : normalizedName.includes("bradesco") ? "bradesco"
+   : normalizedName.includes("banco do brasil") || normalizedName === "bb" || normalizedName.includes(" bb ") ? "bb"
+   : normalizedName.includes("caixa") ? "caixa"
+   : normalizedName.includes("santander") ? "santander"
+   : normalizedName.includes("nubank") || normalizedName === "nu" ? "nubank"
+   : normalizedName.includes("inter") ? "inter"
+   : normalizedName.includes("c6") ? "c6"
+   : normalizedName.includes("sicredi") ? "sicredi"
+   : normalizedName.includes("sicoob") ? "sicoob"
+   : normalizedName.includes("mercado pago") || normalizedName.includes("mercadopago") ? "mercadopago"
+   : normalizedName.includes("picpay") ? "picpay"
+   : undefined;
+ const preferredId = (!institution || institution === "none" || institution === "other") && inferredId ? inferredId : institution;
+ const meta=INSTITUTIONS.find(item=>item.id===preferredId)??INSTITUTIONS[0];
  const id=meta.id;
- return <span className={`institution-mark institution-${id}`} aria-label={meta.name} title={meta.name}>
-   {id==="bb"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M5 16 15 4h9L14 16l10 12h-9z" fill="#003da5"/><path d="M35 16 25 4h-9l10 12-10 12h9z" fill="#ffdf00"/></svg>
-   :id==="caixa"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M4 8h12l8 8-8 8H4l8-8z" fill="#ff8a00"/><path d="M36 8H24l-8 8 8 8h12l-8-8z" fill="#fff"/><path d="M15 4h10l-5 7zM15 28h10l-5-7z" fill="#00a0df"/></svg>
-   :id==="santander"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M21 3c-1 6 7 8 7 14 0 3-2 5-5 5 1-4-1-7-5-10-1 4-7 7-7 12 0 4 4 6 9 6 9 0 14-5 14-12 0-7-8-10-13-15z" fill="currentColor"/></svg>
+ return <span className={`institution-mark institution-${id}`} role="img" aria-label={meta.name} title={meta.name}>
+   {REAL_LOGO_SLUGS[id]&&<img className="institution-real-logo" src={`https://henriquezolini.github.io/react-bancos/icons/${REAL_LOGO_SLUGS[id]}.svg`} alt="" aria-hidden="true" onError={event=>{event.currentTarget.style.display="none"}}/>}
+   {id==="bb"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M3 16 13 4h9L12 16l10 12h-9z" fill="#003da5"/><path d="M37 16 27 4h-9l10 12-10 12h9z" fill="#ffdf00"/></svg>
+   :id==="caixa"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M3 8h12l8 8-8 8H3l8-8z" fill="#ff8a00"/><path d="M37 8H25l-8 8 8 8h12l-8-8z" fill="#fff"/><path d="M15 4h10l-5 7zM15 28h10l-5-7z" fill="#00a0df"/></svg>
+   :id==="santander"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M21 2c-1 6 7 8 7 14 0 3-2 5-5 5 1-4-1-7-5-10-1 4-7 7-7 12 0 4 4 6 9 6 9 0 14-5 14-12 0-7-8-10-13-15z" fill="currentColor"/></svg>
    :id==="sicredi"?<svg viewBox="0 0 40 32" aria-hidden="true"><circle cx="20" cy="16" r="13" fill="none" stroke="currentColor" strokeWidth="3"/><path d="M20 5 25 13 20 11 15 13zM20 27l-5-8 5 2 5-2zM8 16l8-5-2 5 2 5zM32 16l-8-5 2 5-2 5z" fill="currentColor"/></svg>
    :id==="sicoob"?<svg viewBox="0 0 40 32" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="3"><circle cx="14" cy="11" r="7"/><circle cx="26" cy="11" r="7"/><circle cx="20" cy="22" r="7"/></g></svg>
    :id==="bradesco"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M20 3c-4 5-8 8-8 13a8 8 0 0 0 16 0c0-5-4-8-8-13zm-1 10h2v14h-2zM8 28h24v2H8z" fill="currentColor"/></svg>
    :id==="itau"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="17" fontWeight="900" fill="currentColor">itaú</text></svg>
-   :id==="nubank"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="18" fontWeight="900" fill="currentColor">nu</text></svg>
+   :id==="nubank"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="19" fontWeight="900" fill="currentColor">nu</text></svg>
    :id==="inter"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="21" textAnchor="middle" fontSize="12" fontWeight="900" fill="currentColor">inter</text></svg>
    :id==="c6"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="17" fontWeight="900" fill="currentColor">C6</text></svg>
-   :id==="mercadopago"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M7 12c4-6 8-6 13 0 5-6 9-6 13 0l-5 8H12z" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/><path d="M13 20l7 6 7-6" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>
+   :id==="mercadopago"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="22" textAnchor="middle" fontSize="16" fontWeight="900" fill="currentColor">MP</text></svg>
    :id==="picpay"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="23" textAnchor="middle" fontSize="22" fontWeight="900" fill="currentColor">P</text></svg>
-   :id==="none"?<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M20 3 35 16 20 29 5 16z" fill="none" stroke="currentColor" strokeWidth="3"/><circle cx="20" cy="16" r="4" fill="currentColor"/></svg>
+   :id==="none"?<svg viewBox="0 0 40 32" aria-hidden="true"><text x="20" y="23" textAnchor="middle" fontSize="21" fontWeight="900" fill="currentColor">R$</text></svg>
    :<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M7 9h26v14H7z" fill="none" stroke="currentColor" strokeWidth="2.5"/><path d="M7 14h26" stroke="currentColor" strokeWidth="2.5"/></svg>}
  </span>;
 }
@@ -348,7 +493,7 @@ function QuickCategoryCreate({kind,data,onChange,onCreated,onCancel}:{kind:Categ
  </div>;
 }
 
-function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>;initialView?:"new"|"cashflow"}) {
  const [editing,setEditing]=useState<Transaction|null>(null);
  const [type,setType]=useState<TransactionType>("EXPENSE");
  const [status,setStatus]=useState<TransactionStatus>("PAID");
@@ -370,12 +515,18 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
  const [filterStatus,setFilterStatus]=useState<"ALL"|TransactionStatus>("ALL");
  const [fromDate,setFromDate]=useState("");
  const [toDate,setToDate]=useState("");
+ const [selectedMonth,setSelectedMonth]=useState(()=>todayFinancialDate().slice(0,7));
  const [busy,setBusy]=useState(false); const [error,setError]=useState("");
  const [pendingRecurringEdit,setPendingRecurringEdit]=useState<{previous:Transaction;next:Transaction}|null>(null);
- const [view,setView]=useState<"new"|"cashflow">("new");
+ const editorRef=useRef<HTMLElement|null>(null);
+ useEffect(()=>{if(editing){window.scrollTo({top:0,behavior:"smooth"});editorRef.current?.scrollIntoView({behavior:"smooth",block:"start"});}},[editing]);
+ const [view,setView]=useState<"new"|"cashflow">(initialView);
  const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
+ useEffect(()=>{setView(initialView);if(initialView==="new"){setEditing(null);setLaunchMode("unique");}},[initialView]);
+ useEffect(()=>{if(view==="new"){window.scrollTo({top:0,behavior:"smooth"});if(launchMode==="unique"){requestAnimationFrame(()=>editorRef.current?.scrollIntoView({behavior:"smooth",block:"start"}));}}},[view,launchMode]);
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
+ const monthOptions=[...new Set([todayFinancialDate().slice(0,7),...data.transactions.map(t=>t.date.slice(0,7))])].sort((a,b)=>b.localeCompare(a));
  const visible=data.transactions.filter(t=>{
    if(filter!=="ALL"&&t.type!==filter)return false;
    if(filterStatus!=="ALL"&&t.status!==filterStatus)return false;
@@ -387,20 +538,26 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    if(query){const category=data.categories.find(c=>c.id===t.categoryId)?.name??"";const account=data.accounts.find(a=>a.id===t.accountId)?.name??"";const destination=data.accounts.find(a=>a.id===t.destinationAccountId)?.name??"";if(![t.description,category,account,destination].some(value=>value.toLocaleLowerCase("pt-BR").includes(query)))return false;}
    return true;
  }).sort((a,b)=>b.date.localeCompare(a.date));
- const cashflowReceived=visible.filter(t=>t.type==="INCOME"&&t.status==="RECEIVED").reduce((sum,t)=>sum+t.amountCents,0);
- const cashflowPaid=visible.filter(t=>t.type==="EXPENSE"&&t.status==="PAID").reduce((sum,t)=>sum+t.amountCents,0);
- const cashflowUpcoming=visible.filter(t=>(t.type==="INCOME"||t.type==="EXPENSE")&&(t.status==="PENDING"||t.status==="PLANNED")).reduce((sum,t)=>sum+(t.type==="INCOME"?t.amountCents:-t.amountCents),0);
+ const periodVisible=selectedMonth==="ALL"?visible:visible.filter(t=>t.date.startsWith(selectedMonth));
+ const cashflowReceived=periodVisible.filter(t=>t.type==="INCOME"&&t.status==="RECEIVED").reduce((sum,t)=>sum+t.amountCents,0);
+ const cashflowPaid=periodVisible.filter(t=>((t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT")&&t.status==="PAID").reduce((sum,t)=>sum+t.amountCents,0);
+ const cashflowUpcoming=periodVisible.filter(t=>(t.type==="INCOME"||(t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT")&&(t.status==="PENDING"||t.status==="PLANNED")).reduce((sum,t)=>sum+(t.type==="INCOME"?t.amountCents:-t.amountCents),0);
+ const cashflowPlannedIncome=periodVisible.filter(t=>t.type==="INCOME"&&(t.status==="PENDING"||t.status==="PLANNED")).reduce((sum,t)=>sum+t.amountCents,0);
+ const cashflowPlannedOut=periodVisible.filter(t=>((t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT")&&(t.status==="PENDING"||t.status==="PLANNED")).reduce((sum,t)=>sum+t.amountCents,0);
+ const cashflowActualNet=cashflowReceived-cashflowPaid;
  const currentMonth=todayFinancialDate().slice(0,7);
  const currentMonthEnd=currentMonth+"-"+String(new Date(Number(currentMonth.slice(0,4)),Number(currentMonth.slice(5,7)),0).getDate()).padStart(2,"0");
  const currentMonthLabel=new Date(currentMonth+"-01T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
  const monthLabel=(month:string)=>new Date(month+"-01T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
- const cashflowThisMonth=visible.filter(t=>t.date.startsWith(currentMonth)&&t.status!=="CANCELLED").sort((a,b)=>a.date.localeCompare(b.date));
+ const selectedMonthLabel=selectedMonth==="ALL"?"Todos os meses":monthLabel(selectedMonth);
+ const cashflowThisMonth=periodVisible.filter(t=>(selectedMonth==="ALL"||t.date.startsWith(selectedMonth))&&t.status!=="CANCELLED").sort((a,b)=>a.date.localeCompare(b.date));
  const cashflowFuture=visible.filter(t=>t.date>currentMonthEnd&&(t.status==="PENDING"||t.status==="PLANNED")).sort((a,b)=>a.date.localeCompare(b.date));
  const cashflowFutureMonths=[...new Set(cashflowFuture.map(t=>t.date.slice(0,7)))].sort();
- const cashflowMonthNet=cashflowThisMonth.filter(t=>t.type==="INCOME"||t.type==="EXPENSE").reduce((sum,t)=>sum+(t.type==="INCOME"?t.amountCents:-t.amountCents),0);
+ const cashflowMonthNet=cashflowThisMonth.filter(t=>t.type==="INCOME"||(t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT").reduce((sum,t)=>sum+(t.type==="INCOME"?t.amountCents:-t.amountCents),0);
 
  function reset(){setPendingRecurringEdit(null);setEditing(null);setLaunchMode("unique");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
  function edit(t:Transaction){
+   try{validateTransactionCanEdit(t)}catch(e){setError(e instanceof Error?e.message:"Este lançamento não pode ser editado.");return;}
    if(t.installmentGroupId){setError("Parcelas vinculadas devem ser gerenciadas pelo grupo. Use os comandos de cancelamento abaixo.");return;}
    setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new");setLaunchMode("unique")
  }
@@ -444,47 +601,80 @@ function Transactions({data,onChange}:{data:EntityCollection;onChange:(next:Enti
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false)}
  }
  async function cancel(t:Transaction){
-   if(!confirm("Cancelar este lançamento? O histórico será preservado."))return;
+   if(!await styledConfirm("Cancelar este lançamento? O histórico será preservado."))return;
    setBusy(true);setError("");
    try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:"CANCELLED" as const}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível cancelar.");}finally{setBusy(false)}
+ }
+ async function removeTransaction(t:Transaction){
+   if(t.installmentGroupId){setError("Esta parcela pertence a um grupo. Cancele-a para preservar o histórico.");return;}
+   if(data.recurringRules.some(rule=>rule.transactionIds.includes(t.id))){setError("Este lançamento pertence a uma recorrência. Use Cancelar para preservar a regra recorrente.");return;}
+   if(!await styledConfirm(`Apagar o lançamento "${t.description||labelType(t)}" de ${money(t.amountCents)}?`))return;
+   setBusy(true);setError("");
+   try{
+     await onChange({...data,transactions:data.transactions.filter(x=>x.id!==t.id)});
+     if(editing?.id===t.id)reset();
+   }catch(e){setError(e instanceof Error?e.message:"Não foi possível apagar o lançamento.");}
+   finally{setBusy(false)}
+ }
+ async function removeRecurringOccurrence(t:Transaction){
+   const rule=data.recurringRules.find(item=>item.transactionIds.includes(t.id));if(!rule){setError("Regra recorrente desta ocorrência não encontrada.");return;}
+   const realized=t.status==="PAID"||t.status==="RECEIVED";
+   if(!await styledConfirm(`Apagar somente a ocorrência "${t.description||labelType(t)}" agendada para ${getRecurringScheduledDate(t)}? A ocorrência será removida e não será gerada novamente. ${realized?"Este registro já foi realizado; a exclusão alterará saldos, faturas e relatórios.": "A regra e as demais ocorrências serão preservadas."} `))return;
+   setBusy(true);setError("");
+   try{await onChange(deleteRecurringOccurrence(data,t.id));if(editing?.id===t.id)reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível excluir a ocorrência recorrente.");}finally{setBusy(false)}
+ }
+ async function removeInstallmentGroup(t:Transaction){
+   const groupId=t.installmentGroupId;if(!groupId)return;
+   const group=data.installmentGroups.find(item=>item.id===groupId);if(!group){setError("Grupo de parcelas não encontrado.");return;}
+   const realizedCount=data.transactions.filter(tx=>group.transactionIds.includes(tx.id)&&(tx.status==="PAID"||tx.status==="RECEIVED")).length;
+   if(!await styledConfirm(`Excluir definitivamente o parcelamento "${group.description}" e suas ${group.transactionIds.length} parcelas? Isso também apagará ${realizedCount} lançamento(s) realizado(s) e alterará saldos, faturas e relatórios. Use apenas para testes ou registros incorretos.`))return;
+   setBusy(true);setError("");
+   try{await onChange(deleteInstallmentGroup(data,groupId));if(editing&&group.transactionIds.includes(editing.id))reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível excluir o parcelamento.");}finally{setBusy(false)}
  }
  async function cancelGroup(t:Transaction,mode:"ONE"|"THIS_AND_FOLLOWING"){
    const groupId=t.installmentGroupId;if(!groupId)return;
    const label=mode==="ONE"?"esta parcela":"esta e todas as seguintes";
-   if(!confirm(`Cancelar ${label}? O histórico será preservado.`))return;
+   if(!await styledConfirm(`Cancelar ${label}? O histórico será preservado.`))return;
    setBusy(true);setError("");
    try{await onChange(cancelInstallments(data,groupId,t.id,mode));}catch(e){setError(e instanceof Error?e.message:"Não foi possível cancelar as parcelas.");}finally{setBusy(false)}
  }
  function labelType(t:Transaction){return t.type==="TRANSFER"?"Transferência":t.type==="CARD_PAYMENT"?"Pagamento de cartão":t.type==="INCOME"?"Entrada":t.creditCardId?"Compra no cartão":"Saída"}
  return <div className="page-content">
    <div className="page-heading"><div><span className="eyebrow">Movimentação financeira</span><h1>{view==="new"?"Novo lançamento":"Fluxo de caixa"}</h1></div></div>
-   <div className="subnav transaction-tabs"><button className={view==="new"?"active":""} onClick={()=>{reset();setView("new");setError("")}}>＋ Novo lançamento</button><button className={view==="cashflow"?"active":""} onClick={()=>{setView("cashflow");setError("")}}>⇄ Fluxo de caixa <span>({data.transactions.length})</span></button></div>
+   <div className="subnav transaction-tabs"><button className={view==="cashflow"?"active":""} onClick={()=>{setView("cashflow");setError("")}}>Lançamentos <span>({data.transactions.length})</span></button><button type="button" className={view==="new"?"active":""} onClick={()=>{setError("");setEditing(null);setPendingRecurringEdit(null);setLaunchMode("unique");setView("new");reset()}}>＋ Novo lançamento</button></div>
    {error&&<div className="global-alert">{error}</div>}
    {view==="new"&&!editing&&<section className="launch-type-picker" aria-label="Tipo de cadastro"><button className={launchMode==="unique"?"launch-type-card active":"launch-type-card"} onClick={()=>{setLaunchMode("unique");setError("")}}><span className="launch-type-icon">＋</span><span><strong>Lançamento único</strong><small>Registrar uma entrada ou saída específica</small></span><span className="launch-type-arrow">›</span></button><button className={launchMode==="recurring"?"launch-type-card active":"launch-type-card"} onClick={()=>{setLaunchMode("recurring");setError("")}}><span className="launch-type-icon recurring">↻</span><span><strong>Lançamento recorrente</strong><small>Programar contas e receitas que se repetem</small></span><span className="launch-type-arrow">›</span></button></section>}
    {pendingRecurringEdit&&<div className="blocking-modal-backdrop" role="presentation"><section className="blocking-modal" role="dialog" aria-modal="true" aria-labelledby="recurring-edit-title"><div className="blocking-modal-symbol">↻</div><span className="eyebrow">Confirmação obrigatória</span><h2 id="recurring-edit-title">Como deseja aplicar esta alteração?</h2><p>A alteração foi feita em uma ocorrência de um lançamento recorrente. Escolha se o novo valor vale só para esta data ou para esta e as próximas ocorrências.</p><div className="blocking-modal-context"><strong>{pendingRecurringEdit.next.description||"Lançamento recorrente"}</strong><span>{money(pendingRecurringEdit.previous.amountCents)} <span aria-hidden="true">→</span> {money(pendingRecurringEdit.next.amountCents)}</span></div><div className="blocking-modal-actions"><button className="primary" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange(applyRecurringOccurrenceEdit(data,pendingRecurringEdit.previous,pendingRecurringEdit.next,"ONLY_THIS"));reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível ajustar a ocorrência.")}finally{setBusy(false)}}}>Somente este lançamento</button><button className="secondary" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange(applyRecurringOccurrenceEdit(data,pendingRecurringEdit.previous,pendingRecurringEdit.next,"THIS_AND_FOLLOWING"));reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível aplicar aos próximos.")}finally{setBusy(false)}}}>Este e os próximos</button><button className="modal-cancel" disabled={busy} onClick={()=>setPendingRecurringEdit(null)}>Voltar sem salvar</button></div></section></div>}
-   {view==="cashflow"&&<><section className="cashflow-summary" aria-label="Resumo do fluxo de caixa"><article><span>Entradas recebidas</span><strong className="money-positive">{money(cashflowReceived)}</strong></article><article><span>Saídas pagas</span><strong className="money-negative">{money(cashflowPaid)}</strong></article><article><span>Saldo previsto dos pendentes</span><strong className={cashflowUpcoming<0?"money-negative":cashflowUpcoming>0?"money-positive":"money-neutral"}>{cashflowUpcoming<0?"−":cashflowUpcoming>0?"+":""}{money(Math.abs(cashflowUpcoming))}</strong></article></section><section className="cashflow-period-panel panel" aria-label="Lançamentos deste mês"><div className="cashflow-period-heading"><div><h2>Este mês</h2><span>{currentMonthLabel}</span></div><strong className={cashflowMonthNet<0?"money-negative":cashflowMonthNet>0?"money-positive":"money-neutral"}>{cashflowMonthNet<0?"−":cashflowMonthNet>0?"+":""}{money(Math.abs(cashflowMonthNet))}</strong></div><p className="cashflow-period-note">Entradas e saídas com data neste mês, incluindo o que já foi realizado e o que ainda está pendente.</p>{cashflowThisMonth.length===0?<Empty text="Nenhum lançamento para este mês com os filtros atuais."/>:<div className="cashflow-period-list">{cashflowThisMonth.map(t=><div className="cashflow-period-row" key={t.id}><div className="cashflow-period-date">{t.date.slice(8,10)}</div><div className="cashflow-period-description"><strong>{t.description||labelType(t)}</strong><span>{labelType(t)} · {t.status==="PAID"?"Pago":t.status==="RECEIVED"?"Recebido":t.status==="PENDING"?"Pendente":t.status==="PLANNED"?"Planejado":"Cancelado"}</span></div><strong className={t.status==="CANCELLED"?"money-cancelled":t.type==="INCOME"?"money-positive":t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"money-negative":"money-neutral"}>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":t.type==="INCOME"?"+":""}{money(t.amountCents)}</strong></div>)}</div>}</section><section className="cashflow-period-panel panel" aria-label="Lançamentos futuros"><div className="cashflow-period-heading"><div><h2>Lançamentos futuros</h2><span>Compromissos a partir do próximo mês</span></div><strong>{cashflowFuture.length} lançamento(s)</strong></div>{cashflowFuture.length===0?<Empty text="Nenhum lançamento futuro pendente ou planejado com os filtros atuais."/>:<div className="cashflow-future-months">{cashflowFutureMonths.map(month=><details className="cashflow-future-month" key={month} open={cashflowFutureMonths.length===1}><summary><span>{monthLabel(month)}</span><span>{cashflowFuture.filter(t=>t.date.startsWith(month)).length} lançamento(s)</span></summary><div className="cashflow-period-list">{cashflowFuture.filter(t=>t.date.startsWith(month)).map(t=><div className="cashflow-period-row" key={t.id}><div className="cashflow-period-date">{t.date.slice(8,10)}</div><div className="cashflow-period-description"><strong>{t.description||labelType(t)}</strong><span>{labelType(t)} · {t.status==="PENDING"?"Pendente":"Planejado"}</span></div><strong className={t.type==="INCOME"?"money-positive":t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"money-negative":"money-neutral"}>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":t.type==="INCOME"?"+":""}{money(t.amountCents)}</strong></div>)}</div></details>)}</div>}</section><div className="cashflow-filter-heading"><strong>Todos os lançamentos</strong><span>{visible.length} resultado(s)</span></div><div className="transaction-filters">{(["ALL","INCOME","EXPENSE","TRANSFER","CARD_PAYMENT"] as const).map(f=><button key={f} className={filter===f?"active":""} onClick={()=>setFilter(f)}>{f==="ALL"?"Todos":f==="INCOME"?"Entradas":f==="EXPENSE"?"Saídas":f==="TRANSFER"?"Transferências":"Cartão"}</button>)}</div>
-   <section className="panel transaction-search-panel"><label className="transaction-search-field"><span aria-hidden="true">⌕</span><input type="search" value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Pesquisar por nome ou descrição…" aria-label="Pesquisar lançamentos"/></label>
-     <div className="transaction-filter-grid">
+   {view==="cashflow"&&<section className="panel transaction-quick-controls" aria-label="Pesquisar e filtrar lançamentos">
+     <div className="transaction-quick-title"><strong>Pesquisar e filtrar</strong></div>
+     <label className="transaction-search-field"><span aria-hidden="true">⌕</span><input type="search" value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="Buscar por nome ou descrição" aria-label="Pesquisar lançamentos"/></label>
+     <div className="transaction-quick-grid">
+       <label>Mês<select value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)}><option value="ALL">Todos os meses</option>{monthOptions.map(month=><option key={month} value={month}>{month===todayFinancialDate().slice(0,7)?"Mês atual · ":""}{monthLabel(month)}</option>)}</select></label>
+       <label>Tipo<select value={filter} onChange={e=>setFilter(e.target.value as typeof filter)}><option value="ALL">Todos os tipos</option><option value="INCOME">Entradas</option><option value="EXPENSE">Saídas</option><option value="TRANSFER">Transferências</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
        <label>Categoria<select value={filterCategoryId} onChange={e=>setFilterCategoryId(e.target.value)}><option value="">Todas as categorias</option>{data.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
        <label>Conta<select value={filterAccountId} onChange={e=>setFilterAccountId(e.target.value)}><option value="">Todas as contas</option>{data.accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
        <label>Situação<select value={filterStatus} onChange={e=>setFilterStatus(e.target.value as "ALL"|TransactionStatus)}><option value="ALL">Todas as situações</option><option value="PAID">Pago</option><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option><option value="CANCELLED">Cancelado</option></select></label>
        <label>De<input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/></label>
        <label>Até<input type="date" value={toDate} min={fromDate||undefined} onChange={e=>setToDate(e.target.value)}/></label>
-       <button className="secondary compact clear-transaction-filters" onClick={()=>{setSearchText("");setFilterCategoryId("");setFilterAccountId("");setFilterStatus("ALL");setFromDate("");setToDate("");setFilter("ALL")}}>Limpar filtros</button>
+       <button className="secondary compact clear-transaction-filters" onClick={()=>{setSearchText("");setFilterCategoryId("");setFilterAccountId("");setFilterStatus("ALL");setFromDate("");setToDate("");setFilter("ALL");setSelectedMonth("ALL")}}>Limpar filtros</button>
      </div>
-   </section>
-   <section className="panel transaction-list">{visible.length===0?<Empty text="Nenhum lançamento encontrado."/>:visible.map(t=>{
+   </section>}
+   {view==="cashflow"&&<><div className="cashflow-summary-title"><strong>Resumo do período</strong><span>{selectedMonthLabel}</span></div><section className="cashflow-summary" aria-label="Resumo do fluxo de caixa"><article><span>Entradas recebidas</span><strong className="money-positive">{money(cashflowReceived)}</strong></article><article><span>Saídas pagas</span><strong className="money-negative">{money(cashflowPaid)}</strong></article><article><span>Entradas previstas</span><strong className="status-value-planned">{money(cashflowPlannedIncome)}</strong></article><article><span>Saídas previstas</span><strong className="status-value-planned">{money(cashflowPlannedOut)}</strong></article><article><span>Saldo realizado</span><strong className={cashflowActualNet<0?"money-negative":cashflowActualNet>0?"money-positive":"money-neutral"}>{cashflowActualNet<0?"−":cashflowActualNet>0?"+":""}{money(Math.abs(cashflowActualNet))}</strong></article><article><span>Saldo previsto do período</span><strong className={cashflowMonthNet<0?"money-negative":cashflowMonthNet>0?"money-positive":"money-neutral"}>{cashflowMonthNet<0?"−":cashflowMonthNet>0?"+":""}{money(Math.abs(cashflowMonthNet))}</strong></article></section></>}
+   {view==="cashflow"&&<><div className="cashflow-filter-heading"><strong>Lançamentos · {selectedMonthLabel}</strong><span>{periodVisible.length} resultado(s)</span></div>
+   <section className="panel transaction-list">{periodVisible.length===0?<Empty text="Nenhum lançamento encontrado neste período."/>:periodVisible.map(t=>{
      const group=t.installmentGroupId?data.installmentGroups.find(g=>g.id===t.installmentGroupId):undefined;
      const n=group?getInstallmentNumber(group,t.id):undefined;
      const recurringRule=data.recurringRules.find(rule=>rule.transactionIds.includes(t.id));
-     return <div className={`transaction-row ${recurringRule?"transaction-row-recurring":""} ${t.status==="CANCELLED"?"transaction-row-cancelled":""}`} key={t.id}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date}{t.scheduledDate&&t.scheduledDate!==t.date?` · agendada ${t.scheduledDate}`:""} · {labelType(t)} · {t.status==="PAID"?"Pago":t.status==="RECEIVED"?"Recebido":t.status==="PENDING"?"Pendente":t.status==="PLANNED"?"Planejado":"Cancelado"}{group&&` · Parcela ${n}/${group.installmentCount}`}</span></div>
-       <div className={`transaction-value ${t.status==="CANCELLED"?"money-cancelled":t.type==="INCOME"?"money-positive":t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"money-negative":"money-neutral"}`}><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":t.type==="INCOME"?"+":""}{money(t.amountCents)}</strong><div className="row-actions">
-         {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>} </> :
-           <>{(t.status==="PENDING"||t.status==="PLANNED")&&(t.type==="INCOME"||t.type==="EXPENSE")&&<button className="link-button settle-history-button" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:t.type==="INCOME"?"RECEIVED" as const:"PAID" as const}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível confirmar.");}finally{setBusy(false)}}}>✓ {t.type==="INCOME"?"Recebido":"Pago"}</button>}<button className="link-button" onClick={()=>edit(t)}>Editar</button>{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
+     return <div className={`transaction-row ${recurringRule?"transaction-row-recurring":""} ${t.status==="CANCELLED"?"transaction-row-cancelled":""} transaction-row-interactive`} key={t.id} role={t.status==="CANCELLED"?"group":"button"} tabIndex={t.status==="CANCELLED"?-1:0} aria-label={t.status==="CANCELLED"?`Lançamento cancelado ${t.description||labelType(t)}. Use Apagar para removê-lo.`:`Abrir lançamento ${t.description||labelType(t)} para editar`} onClick={e=>{if((e.target as HTMLElement).closest("button")||t.status==="CANCELLED")return;edit(t)}} onKeyDown={e=>{if(t.status!=="CANCELLED"&&(e.key==="Enter"||e.key===" ")&&!(e.target as HTMLElement).closest("button")){e.preventDefault();edit(t)}}}><div><strong>{t.description||labelType(t)}{recurringRule&&<span className="transaction-recurring-badge">↻ Recorrente</span>}</strong><span>{t.date}{t.scheduledDate&&t.scheduledDate!==t.date?` · agendada ${t.scheduledDate}`:""} · {labelType(t)}{group&&` · Parcela ${n}/${group.installmentCount}`} <span className={`transaction-status ${t.status==="PAID"?"status-paid":t.status==="RECEIVED"?"status-received":(t.status==="PENDING"||t.status==="PLANNED")&&(t.scheduledDate??t.date)<todayFinancialDate()?"status-overdue":t.status==="PLANNED"?"status-planned":t.status==="PENDING"?"status-pending":"status-cancelled"}`}>{(t.status==="PENDING"||t.status==="PLANNED")&&(t.scheduledDate??t.date)<todayFinancialDate()?"Atrasado":t.status==="PAID"?"Pago":t.status==="RECEIVED"?"Recebido":t.status==="PENDING"?"Pendente":t.status==="PLANNED"?"Planejado":"Cancelado"}</span></span></div>
+       <div className={`transaction-value ${t.status==="CANCELLED"?"money-cancelled":(t.status==="PENDING"||t.status==="PLANNED")&&(t.scheduledDate??t.date)<todayFinancialDate()?"status-value-overdue":t.status==="PLANNED"?"status-value-planned":t.status==="PAID"?"status-value-paid":t.status==="RECEIVED"?"status-value-received":"status-value-pending"}`}><strong>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":t.type==="INCOME"?"+":""}{money(t.amountCents)}</strong><div className="row-actions">
+         {group ? <>{t.status!=="CANCELLED"&&<><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"ONE")}>Cancelar</button><button className="link-button danger" disabled={busy} onClick={()=>void cancelGroup(t,"THIS_AND_FOLLOWING")}>+ seguintes</button></>}<button className="link-button danger" disabled={busy} onClick={()=>void removeInstallmentGroup(t)}>Excluir parcelamento</button> </> :
+           <>{(t.status==="PENDING"||t.status==="PLANNED")&&(t.type==="INCOME"||t.type==="EXPENSE")&&<button className="link-button settle-history-button" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await onChange({...data,transactions:data.transactions.map(x=>x.id===t.id?{...x,status:t.type==="INCOME"?"RECEIVED" as const:"PAID" as const}:x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível confirmar.");}finally{setBusy(false)}}}>✓ {t.type==="INCOME"?"Recebido":"Pago"}</button>}{t.status!=="CANCELLED"&&<button className="link-button icon-action-button" type="button" disabled={busy} onClick={()=>edit(t)} aria-label={`Editar ${t.description||labelType(t)}`} title="Editar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>}{!group&&!recurringRule&&<button className="link-button danger icon-action-button" type="button" disabled={busy} onClick={()=>void removeTransaction(t)} aria-label={`Excluir ${t.description||labelType(t)}`} title="Excluir"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 10v6M14 10v6"/></svg></button>}{!group&&recurringRule&&<button className="link-button danger icon-action-button" type="button" disabled={busy} onClick={()=>void removeRecurringOccurrence(t)} aria-label={`Excluir ocorrência de ${t.description||labelType(t)}`} title="Excluir ocorrência"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 10v6M14 10v6"/></svg></button>}{t.status!=="CANCELLED"&&<button className="link-button danger" disabled={busy} onClick={()=>void cancel(t)}>Cancelar</button>}</>}
        </div></div></div>
    })}</section></>}
+
+   {view==="cashflow"&&<><section className="cashflow-period-panel panel" aria-label="Lançamentos do período selecionado"><div className="cashflow-period-heading"><div><h2>{selectedMonth==="ALL"?"Todos os meses":"Fluxo do mês"}</h2><span>{selectedMonthLabel}</span></div><strong className={cashflowMonthNet<0?"money-negative":cashflowMonthNet>0?"money-positive":"money-neutral"}>{cashflowMonthNet<0?"−":cashflowMonthNet>0?"+":""}{money(Math.abs(cashflowMonthNet))}</strong></div><p className="cashflow-period-note">Considera entradas, saídas da conta e pagamentos de fatura. Compras no cartão não reduzem o saldo bancário novamente. O filtro mensal também atualiza os resumos acima.</p>{cashflowThisMonth.length===0?<Empty text="Nenhum lançamento para este mês com os filtros atuais."/>:<div className="cashflow-period-list">{cashflowThisMonth.map(t=><div className="cashflow-period-row" key={t.id}><div className="cashflow-period-date">{t.date.slice(8,10)}</div><div className="cashflow-period-description"><strong>{t.description||labelType(t)}</strong><span>{labelType(t)} · {t.status==="PAID"?"Pago":t.status==="RECEIVED"?"Recebido":t.status==="PENDING"?"Pendente":t.status==="PLANNED"?"Planejado":"Cancelado"}</span></div><strong className={t.status==="CANCELLED"?"money-cancelled":t.type==="INCOME"?"money-positive":t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"money-negative":"money-neutral"}>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":t.type==="INCOME"?"+":""}{money(t.amountCents)}</strong></div>)}</div>}</section><section className="cashflow-period-panel panel" aria-label="Lançamentos futuros"><div className="cashflow-period-heading"><div><h2>Lançamentos futuros</h2><span>Compromissos a partir do próximo mês</span></div><strong>{cashflowFuture.length} lançamento(s)</strong></div>{cashflowFuture.length===0?<Empty text="Nenhum lançamento futuro pendente ou planejado com os filtros atuais."/>:<div className="cashflow-future-months">{cashflowFutureMonths.map(month=><details className="cashflow-future-month" key={month} open={cashflowFutureMonths.length===1}><summary><span>{monthLabel(month)}</span><span>{cashflowFuture.filter(t=>t.date.startsWith(month)).length} lançamento(s)</span></summary><div className="cashflow-period-list">{cashflowFuture.filter(t=>t.date.startsWith(month)).map(t=><div className="cashflow-period-row" key={t.id}><div className="cashflow-period-date">{t.date.slice(8,10)}</div><div className="cashflow-period-description"><strong>{t.description||labelType(t)}</strong><span>{labelType(t)} · {t.status==="PENDING"?"Pendente":"Planejado"}</span></div><strong className={t.type==="INCOME"?"money-positive":t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"money-negative":"money-neutral"}>{t.type==="EXPENSE"||t.type==="CARD_PAYMENT"?"−":t.type==="INCOME"?"+":""}{money(t.amountCents)}</strong></div>)}</div></details>)}</div>}</section></>}
    {view==="new"&&launchMode==="recurring"&&!editing&&<div className="transaction-workspace recurring-workspace"><div className="workspace-heading"><div><span className="eyebrow">Cadastro recorrente</span><h2>Configure uma movimentação que se repete</h2></div><button className="workspace-back" onClick={()=>setLaunchMode("unique")}>← Tipo de lançamento</button></div><Recurring data={data} onChange={onChange} embedded onCreated={()=>setLaunchMode("unique")} onCancel={()=>setLaunchMode("unique")}/></div>}
-   {view==="new"&&launchMode==="unique"&&<section className="panel form-panel transaction-workspace"><div className="workspace-heading"><div><span className="eyebrow">{editing?"Edição":"Cadastro único"}</span><h2>{editing?"Editar lançamento":"Detalhes do lançamento"}</h2></div>{editing&&<button className="workspace-back" onClick={reset}>Cancelar edição</button>}</div><div className="form-grid">
+   {view==="new"&&launchMode==="unique"&&<section ref={editorRef} className="panel form-panel transaction-workspace"><div className="workspace-heading"><div><span className="eyebrow">{editing?"Edição":"Cadastro único"}</span><h2>{editing?"Editar lançamento":"Detalhes do lançamento"}</h2></div>{editing&&<button className="workspace-back" onClick={reset}>Cancelar edição</button>}</div><div className="form-grid">
      <label>Tipo<select value={type} disabled={!!editing} aria-describedby={editing?"transaction-type-lock-note":undefined} onChange={e=>{const v=e.target.value as TransactionType;setType(v);setCategoryId("");setCreditCardId("");if(v!=="EXPENSE")setParcelado(false)}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option><option value="TRANSFER">Transferência</option><option value="CARD_PAYMENT">Pagamento de cartão</option></select></label>
      <>{editing&&<p id="transaction-type-lock-note" className="form-note">O tipo do lançamento não pode ser alterado depois de criado. Para mudar a natureza financeira, cancele este lançamento e registre outro.</p>}</><label>Status<select value={status} onChange={e=>setStatus(e.target.value as RecurringRule["status"])}>{type==="INCOME"?<><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>:<><option value="PAID">Pago</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option></>}</select></label>
      <label>Data<input type="date" value={date} onChange={e=>setDate(e.target.value)} disabled={recurringGenerated} required/></label>
@@ -552,14 +742,20 @@ function Recurring({data,onChange,embedded=false,onCreated,onCancel}:{data:Entit
    try{const horizon=new Date();horizon.setMonth(horizon.getMonth()+12);const through=`${horizon.getFullYear()}-${String(horizon.getMonth()+1).padStart(2,"0")}-${String(horizon.getDate()).padStart(2,"0")}`;const result=generateRecurringTransactions(data,rule,through);await onChange(result.data)}catch(e){setError(e instanceof Error?e.message:"Não foi possível gerar os lançamentos.");}finally{setBusy(false)}
  }
  async function deactivate(rule:RecurringRule){
-   if(!confirm("Desativar esta recorrência? Os lançamentos já gerados serão preservados."))return;
+   if(!await styledConfirm("Desativar esta recorrência? O histórico será preservado; ocorrências futuras pendentes/planejadas geradas automaticamente serão canceladas, e exceções editadas individualmente serão mantidas."))return;
    setBusy(true);setError("");
    try{await onChange(deactivateRecurringRule(data,rule.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível desativar.")}finally{setBusy(false)}
+ }
+ async function removeRule(rule:RecurringRule){
+   const realizedCount=data.transactions.filter(tx=>rule.transactionIds.includes(tx.id)&&(tx.status==="PAID"||tx.status==="RECEIVED")).length;
+   if(!await styledConfirm(`Excluir definitivamente a recorrência "${rule.description}" e todos os ${rule.transactionIds.length} lançamentos gerados? Isso também apagará ${realizedCount} lançamento(s) realizado(s) e alterará saldos, faturas e relatórios. Use apenas para testes ou registros incorretos.`))return;
+   setBusy(true);setError("");
+   try{await onChange(deleteRecurringRuleAndOccurrences(data,rule.id));if(editing?.id===rule.id)reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível excluir a recorrência.");}finally{setBusy(false)}
  }
  const frequencyLabel=(f:RecurringFrequency)=>({WEEKLY:"Semanal",BIWEEKLY:"Quinzenal",MONTHLY:"Mensal",BIMONTHLY:"Bimestral",QUARTERLY:"Trimestral",SEMIANNUAL:"Semestral",ANNUAL:"Anual"}[f]);
  return <div className="page-content">
    {!embedded&&<><div className="page-heading"><div><span className="eyebrow">Automação</span><h1>Recorrências</h1></div><button className="primary compact" onClick={reset}>+ Nova recorrência</button></div>
-   <section className="panel transaction-list">{data.recurringRules.filter(r=>r.active).length===0?<Empty text="Nenhuma recorrência ativa."/>:data.recurringRules.filter(r=>r.active).map(r=><div className="transaction-row" key={r.id}><div><strong>{r.description}</strong><span>{frequencyLabel(r.frequency)} · desde {r.startDate} · {money(r.amountCents)} · {r.transactionIds.length} lançamentos gerados</span></div><div className="row-actions"><button className="link-button" onClick={()=>edit(r)}>Editar regra</button><button className="link-button" disabled={busy} onClick={()=>void generate(r)}>Gerar próximos</button><button className="link-button danger" disabled={busy} onClick={()=>void deactivate(r)}>Desativar</button></div></div>)}</section></>}
+   <section className="panel transaction-list">{data.recurringRules.length===0?<Empty text="Nenhuma recorrência cadastrada."/>:data.recurringRules.map(r=><div className="transaction-row" key={r.id}><div><strong>{r.description}</strong><span>{r.active?"Ativa":"Inativa"} · {frequencyLabel(r.frequency)} · desde {r.startDate} · {money(r.amountCents)} · {r.transactionIds.length} lançamentos gerados</span></div><div className="row-actions">{r.active&&<><button className="link-button" onClick={()=>edit(r)}>Editar regra</button><button className="link-button" disabled={busy} onClick={()=>void generate(r)}>Gerar próximos</button><button className="link-button danger" disabled={busy} onClick={()=>void deactivate(r)}>Desativar</button></>}<button className="link-button danger" disabled={busy} onClick={()=>void removeRule(r)}>Excluir tudo</button></div></div>)}</section></>}
    {error&&<div className="global-alert">{error}</div>}
    <section className="panel form-panel"><h2>{editing?"Editar recorrência":embedded?"Lançamento recorrente":"Nova recorrência"}</h2><div className="form-grid">
     <label>Tipo<select value={type} onChange={e=>{const v=e.target.value as "INCOME"|"EXPENSE";setType(v);setCategoryId("");if(v==="INCOME")setCreditCardId("")}}><option value="EXPENSE">Saída</option><option value="INCOME">Entrada</option></select></label>
@@ -593,7 +789,7 @@ function Pots({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollec
  async function movement(potId:string){
    setError("");try{const cents=parseAmount(amount);const next=createPotMovement(data,{potId,type:movementType,amountCents:cents,date:todayFinancialDate(),description:description|| (movementType==="DEPOSIT"?"Reserva":"Resgate")},real);setBusy(true);await onChange(next);setAmount("");setDescription("")}catch(e){setError(e instanceof Error?e.message:"Não foi possível registrar o movimento.")}finally{setBusy(false)}
  }
- async function archive(pot:Pot){if(!confirm("Arquivar esta caixinha? O histórico dos movimentos será preservado."))return;setBusy(true);setError("");try{await onChange(archivePot(data,pot.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
+ async function archive(pot:Pot){if(!await styledConfirm("Arquivar esta caixinha? O histórico dos movimentos será preservado."))return;setBusy(true);setError("");try{await onChange(archivePot(data,pot.id))}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
  return <div className="page-content">
    <div className="page-heading"><div><span className="eyebrow">Reservas</span><h1>Caixinhas</h1></div><button className="primary compact" onClick={reset}>+ Nova caixinha</button></div>
    {error&&<div className="global-alert">{error}</div>}
@@ -622,7 +818,7 @@ function Budgets({data,onChange}:{data:EntityCollection;onChange:(next:EntityCol
      setBusy(true);await onChange(next);reset();
    }catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar o orçamento.")}finally{setBusy(false)}
  }
- async function archive(b:Budget){if(!confirm("Arquivar este orçamento? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,budgets:data.budgets.map(x=>x.id===b.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
+ async function archive(b:Budget){if(!await styledConfirm("Arquivar este orçamento? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,budgets:data.budgets.map(x=>x.id===b.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
  return <div className="page-content">
   <div className="page-heading"><div><span className="eyebrow">Planejamento</span><h1>Orçamentos</h1></div><button className="primary compact" onClick={reset}>+ Novo orçamento</button></div>
   {error&&<div className="global-alert">{error}</div>}
@@ -657,32 +853,32 @@ function Settings({data,family,onChange,onSignOut,syncStatus}:{data:EntityCollec
   setError("");setBusy(true);
   try{
    const next=importJson(await file.text());
-   if(!confirm("Importar este backup substituirá os dados locais atuais. Deseja continuar?"))return;
-   await onChange(next); alert("Backup importado com sucesso.");
+   if(!await styledConfirm("Importar este backup substituirá os dados locais atuais. Deseja continuar?"))return;
+   await onChange(next); await styledNotice("Backup importado com sucesso.","Importação concluída");
   }catch(e){setError(e instanceof Error?e.message:"Backup inválido.");}
   finally{setBusy(false);}
  }
  async function resetFinancialData(){
   if(syncStatus!=="synced"){setError("Aguarde a sincronização concluir antes de zerar os dados da família.");return;}
   if(resetPhrase!=="ZERAR DADOS"){setError("Digite exatamente ZERAR DADOS para confirmar.");return;}
-  if(!confirm("ATENÇÃO: este comando zera os DADOS FINANCEIROS DA FAMÍLIA e será sincronizado com todos os aparelhos. Contas, cartões, lançamentos, parcelas, recorrências, caixinhas, orçamentos e pessoas serão apagados. Categorias, família e login serão preservados. Faça um backup antes de continuar. Deseja realmente apagar os dados da família?"))return;
+  if(!await styledConfirm("ATENÇÃO: este comando zera os DADOS FINANCEIROS DA FAMÍLIA e será sincronizado com todos os aparelhos. Contas, cartões, lançamentos, parcelas, recorrências, caixinhas, orçamentos e pessoas serão apagados. Categorias, família e login serão preservados. Faça um backup antes de continuar. Deseja realmente apagar os dados da família?"))return;
   setError("");setBusy(true);
   try{
-   const next:EntityCollection={...data,people:[],accounts:[],cards:[],transactions:[],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[]};
+   const next:EntityCollection={...data,people:[],accounts:[],cards:[],transactions:[],installmentGroups:[],recurringRules:[],pots:[],potMovements:[],budgets:[],debts:[]};
    await onChange(next);
    setResetPhrase("");setResetOpen(false);
-   alert("Dados financeiros zerados com segurança. A estrutura da família e as categorias foram preservadas.");
+   await styledNotice("Dados financeiros zerados com segurança. A estrutura da família e as categorias foram preservadas.","Dados financeiros zerados");
   }catch(e){setError(e instanceof Error?e.message:"Não foi possível zerar os dados financeiros.");}
   finally{setBusy(false);}
  }
 
  return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Aplicativo</span><h1>Configurações</h1></div></div>
  {error&&<div className="global-alert">{error}</div>}
- <section className="panel"><h2>Família</h2><p>Compartilhe este código com outro membro para que ele possa entrar nesta família.</p><div className="family-invite-code"><strong>{family.invite_code}</strong><button className="secondary compact" onClick={async()=>{try{if(!navigator.clipboard)throw new Error("clipboard_unavailable");await navigator.clipboard.writeText(family.invite_code);alert("Código de convite copiado.");}catch{setError(`Não foi possível copiar automaticamente. Código: ${family.invite_code}`);}}}>Copiar código</button></div></section>
+ <section className="panel"><h2>Compartilhamento</h2><p>Compartilhe este código para permitir que outra pessoa participe deste espaço financeiro. O código só deve ser enviado a quem você deseja autorizar.</p><div className="family-invite-code"><strong>{family.invite_code}</strong><button className="secondary compact" onClick={async()=>{try{if(!navigator.clipboard)throw new Error("clipboard_unavailable");await navigator.clipboard.writeText(family.invite_code);alert("Código de convite copiado.");}catch{setError(`Não foi possível copiar automaticamente. Código: ${family.invite_code}`);}}}>Copiar código</button></div></section>
  <section className="panel settings-list">
    <div><strong>Aparência</strong><p>Alterne entre tema claro e escuro pelo botão ao lado do ícone de privacidade na tela inicial. A preferência fica salva neste aparelho.</p></div>
   <div><strong>Backup completo</strong><p>Exporta todas as entidades financeiras em JSON.</p><button className="primary compact" onClick={()=>exportJson(data)}>Exportar JSON</button></div>
-  <div className="danger-zone"><strong>Zerar dados financeiros</strong><p>Apaga os dados financeiros <b>da família inteira</b> e sincroniza a limpeza com os outros aparelhos. Faça um backup antes. O reset fica bloqueado enquanto houver sincronização pendente ou conflito.</p><button className="secondary compact danger-button" onClick={()=>{setResetOpen(true);setResetPhrase("");setError("")}} disabled={busy||syncStatus!=="synced"}>Abrir reset seguro</button>{resetOpen&&<div className="reset-confirm"><strong>Confirmação obrigatória</strong><p>Este é um reset compartilhado. Antes de continuar, confirme que você exportou um backup e que não precisa dos dados atuais.</p><p>Digite <b>ZERAR DADOS</b> para habilitar a exclusão.</p><input value={resetPhrase} onChange={e=>setResetPhrase(e.target.value.toUpperCase())} placeholder="ZERAR DADOS" autoCapitalize="characters"/><div className="form-actions"><button className="secondary compact" onClick={()=>{setResetOpen(false);setResetPhrase("")}}>Cancelar</button><button className="primary compact" disabled={busy||resetPhrase!=="ZERAR DADOS"} onClick={()=>void resetFinancialData()}>Zerar dados financeiros</button></div></div>}</div>
+  <div className="danger-zone"><strong>Zerar dados financeiros</strong><p>Apaga os dados financeiros <b>do espaço financeiro inteiro</b> e sincroniza a limpeza com os outros aparelhos. Faça um backup antes. O reset fica bloqueado enquanto houver sincronização pendente ou conflito.</p><button className="secondary compact danger-button" onClick={()=>{setResetOpen(true);setResetPhrase("");setError("")}} disabled={busy||syncStatus!=="synced"}>Abrir reset seguro</button>{resetOpen&&<div className="reset-confirm"><strong>Confirmação obrigatória</strong><p>Este é um reset compartilhado. Antes de continuar, confirme que você exportou um backup e que não precisa dos dados atuais.</p><p>Digite <b>ZERAR DADOS</b> para habilitar a exclusão.</p><input value={resetPhrase} onChange={e=>setResetPhrase(e.target.value.toUpperCase())} placeholder="ZERAR DADOS" autoCapitalize="characters"/><div className="form-actions"><button className="secondary compact" onClick={()=>{setResetOpen(false);setResetPhrase("")}}>Cancelar</button><button className="primary compact" disabled={busy||resetPhrase!=="ZERAR DADOS"} onClick={()=>void resetFinancialData()}>Zerar dados financeiros</button></div></div>}</div>
   <div><strong>Exportar lançamentos</strong><p>Gera CSV para Excel ou LibreOffice.</p><button className="secondary compact" onClick={()=>exportTransactionsCsv(data)}>Exportar CSV</button></div>
   <div><strong>Importar backup</strong><p>O arquivo é validado antes de substituir os dados locais.</p><input type="file" accept="application/json,.json" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.currentTarget.value=""}}/></div>
   <div><strong>Sessão</strong><p>Encerrar a sessão neste aparelho.</p><button className="secondary compact" onClick={()=>void onSignOut()}>Sair da conta</button></div>
@@ -841,7 +1037,7 @@ function Categories({data,onChange}:{data:EntityCollection;onChange:(next:Entity
  function reset(){setEditing(null);setName("");setEmoji("🏷️");setKind("EXPENSE");setError("")}
  function edit(c:Category){setEditing(c);setName(c.name);setEmoji(c.emoji??"🏷️");setKind(c.kind);setError("")}
  async function save(){setError("");try{const c=editing?updateCategory(editing,name,kind,data,emoji):createCategory(name,kind,data,emoji);setBusy(true);await onChange({...data,categories:editing?data.categories.map(x=>x.id===c.id?c:x):[...data.categories,c]});reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a categoria.");}finally{setBusy(false)}}
- async function archive(c:Category){if(!confirm("Arquivar esta categoria? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,categories:data.categories.map(x=>x.id===c.id?archiveCategory(x):x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar a categoria.");}finally{setBusy(false)}}
+ async function archive(c:Category){if(!await styledConfirm("Arquivar esta categoria? O histórico dos lançamentos será preservado."))return;setBusy(true);setError("");try{await onChange({...data,categories:data.categories.map(x=>x.id===c.id?archiveCategory(x):x)});}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar a categoria.");}finally{setBusy(false)}}
  const active=data.categories.filter(c=>c.active);
  return <div className="page-content">
   <div className="page-heading"><div><span className="eyebrow">Cadastros</span><h1>Categorias</h1></div><button className="primary compact" onClick={reset}>+ Nova categoria</button></div>
@@ -872,7 +1068,7 @@ function People({data,onChange}:{data:EntityCollection;onChange:(next:EntityColl
  }
 
  async function archive(person:Person){
-   if(!confirm("Arquivar esta pessoa? O histórico de lançamentos será preservado."))return;
+   if(!await styledConfirm("Arquivar esta pessoa? O histórico de lançamentos será preservado."))return;
    setBusy(true);setError("");
    try{await onChange({...data,people:data.people.map(p=>p.id===person.id?archivePerson(p):p)});}
    catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar a pessoa.");}
@@ -898,22 +1094,37 @@ function People({data,onChange}:{data:EntityCollection;onChange:(next:EntityColl
  </div>;
 }
 
-function More({data,family,onChange,onSignOut,defaultSection="smart",syncStatus}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;defaultSection?:"menu"|"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"categories"|"settings";syncStatus:"syncing"|"synced"|"conflict"|"error"}) {
- const [section,setSection]=useState<"menu"|"smart"|"receipt"|"pots"|"recurring"|"budgets"|"assistant"|"people"|"categories"|"settings">(defaultSection);
- const tools=[{id:"smart",label:"Entrada inteligente",description:"Registrar por texto ou voz",icon:"sparkles"},{id:"receipt",label:"Ler recibo",description:"Capturar dados de uma nota",icon:"scan"},{id:"pots",label:"Caixinhas",description:"Separar dinheiro por objetivo",icon:"target"},{id:"recurring",label:"Recorrências",description:"Organizar pagamentos repetidos",icon:"repeat"},{id:"budgets",label:"Orçamentos",description:"Definir limites por categoria",icon:"chart"},{id:"assistant",label:"Assistente",description:"Consultar a saúde financeira",icon:"brain"},{id:"people",label:"Pessoas",description:"Organizar membros da família",icon:"users"},{id:"categories",label:"Categorias",description:"Classificar entradas e gastos",icon:"shapes"},{id:"settings",label:"Configurações",description:"Backup, convite e segurança",icon:"settings"}] as const;
- const content=section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:section==="people"?<People data={data} onChange={onChange}/>:section==="categories"?<Categories data={data} onChange={onChange}/>:<Settings data={data} family={family} onChange={onChange} onSignOut={onSignOut} syncStatus={syncStatus}/>;
+function Debts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
+ const [editing,setEditing]=useState<Debt|null>(null),[creditor,setCreditor]=useState(""),[description,setDescription]=useState(""),[amount,setAmount]=useState(""),[ownerPersonId,setOwnerPersonId]=useState(""),[dueDate,setDueDate]=useState(""),[priority,setPriority]=useState<DebtPriority>("LOW"),[notes,setNotes]=useState(""),[formOpen,setFormOpen]=useState(false),[error,setError]=useState(""),[busy,setBusy]=useState(false),[statusFilter,setStatusFilter]=useState("ACTIVE"),[paymentDebtId,setPaymentDebtId]=useState<string|null>(null),[paymentAmount,setPaymentAmount]=useState(""),[paymentAccountId,setPaymentAccountId]=useState(""),[paymentDate,setPaymentDate]=useState(todayFinancialDate());
+ function reset(){setEditing(null);setCreditor("");setDescription("");setAmount("");setOwnerPersonId("");setDueDate("");setPriority("LOW");setNotes("");setError("");setFormOpen(false)}
+ function newDebt(){reset();setFormOpen(true)}
+ function editDebt(d:Debt){setEditing(d);setCreditor(d.creditor);setDescription(d.description);setAmount((d.originalAmountCents/100).toFixed(2).replace(".",","));setOwnerPersonId(d.ownerPersonId??"");setDueDate(d.dueDate??"");setPriority(d.priority);setNotes(d.notes??"");setError("");setFormOpen(true)}
+ async function saveDebt(){setError("");let cents:number;try{cents=parseAmount(amount)}catch(e){setError(e instanceof Error?e.message:"Informe um valor válido.");return}if(!creditor.trim()){setError("Informe o credor.");return}if(editing&&cents<editing.balanceDueCents){setError("O valor original não pode ficar abaixo do saldo ainda devido.");return}const debt:Debt={id:editing?.id??crypto.randomUUID(),creditor:creditor.trim(),description:description.trim(),originalAmountCents:cents,balanceDueCents:editing?.balanceDueCents??cents,ownerPersonId:ownerPersonId||undefined,dueDate:dueDate||undefined,priority,status:editing?.status??"OPEN",notes:notes.trim()||undefined,createdAt:editing?.createdAt??new Date().toISOString()};setBusy(true);try{await onChange({...data,debts:editing?data.debts.map(d=>d.id===debt.id?debt:d):[...data.debts,debt]});reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar a dívida.")}finally{setBusy(false)}}
+ async function changeStatus(d:Debt,status:Debt["status"]){setBusy(true);setError("");try{await onChange({...data,debts:data.debts.map(x=>x.id===d.id?{...x,status}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível atualizar a dívida.")}finally{setBusy(false)}}
+ async function payDebt(d:Debt){setError("");let cents:number;try{cents=parseAmount(paymentAmount)}catch(e){setError(e instanceof Error?e.message:"Informe um valor válido.");return}if(cents<=0||cents>d.balanceDueCents){setError("O pagamento precisa ser maior que zero e não pode superar o saldo devido.");return}if(!paymentAccountId||!data.accounts.some(a=>a.id===paymentAccountId&&a.active)){setError("Selecione a conta de onde o pagamento será feito.");return}const tx:Transaction={id:crypto.randomUUID(),date:paymentDate,type:"EXPENSE",status:"PAID",amountCents:cents,description:"Pagamento de dívida — "+d.creditor,personId:d.ownerPersonId,accountId:paymentAccountId,debtId:d.id};try{validateTransaction(tx,{accounts:data.accounts,cards:data.cards,transactions:data.transactions});const balanceDueCents=d.balanceDueCents-cents;const updated={...d,balanceDueCents,status:balanceDueCents===0?"PAID" as const:d.status};setBusy(true);await onChange({...data,transactions:[...data.transactions,tx],debts:data.debts.map(x=>x.id===d.id?updated:x)});setPaymentDebtId(null);setPaymentAmount("");setPaymentAccountId("");setError("")}catch(e){setError(e instanceof Error?e.message:"Não foi possível registrar o pagamento.")}finally{setBusy(false)}}
+ const activeDebts=data.debts.filter(d=>statusFilter==="ACTIVE"?(d.status==="OPEN"||d.status==="NEGOTIATED"):statusFilter==="ALL"?true:d.status===statusFilter);
+ const openBalance=data.debts.filter(d=>d.status==="OPEN"||d.status==="NEGOTIATED").reduce((sum,d)=>sum+d.balanceDueCents,0);
+ if(formOpen)return <div className="debt-page"><div className="page-heading"><div><span className="eyebrow">Obrigações fora do fluxo mensal</span><h1>{editing?"Editar dívida":"Nova dívida"}</h1><p className="form-intro">Cadastre obrigações para lembrar delas sem reduzir o saldo disponível.</p></div><button className="secondary compact" type="button" onClick={reset}>← Voltar</button></div>{error&&<div className="global-alert">{error}</div>}<section className="panel form-panel"><div className="form-grid"><label>Credor / empresa<input value={creditor} onChange={e=>setCreditor(e.target.value)} placeholder="Ex.: empresa, pessoa ou banco" required/></label><label>Descrição<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Do que é essa dívida?"/></label><label>Valor original (R$)<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0,00" required/></label><label>Responsável<select value={ownerPersonId} onChange={e=>setOwnerPersonId(e.target.value)}><option value="">Não definido</option>{data.people.filter(p=>p.active).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Vencimento (opcional)<input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></label><label>Prioridade<select value={priority} onChange={e=>setPriority(e.target.value as DebtPriority)}><option value="LOW">Baixa — pode esperar</option><option value="MEDIUM">Média</option><option value="HIGH">Alta</option></select></label><label className="wide-field">Observações<textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder="Acordos, contatos, lembretes…"/></label></div><p className="form-note">A dívida não altera o saldo bancário nem o fluxo de caixa enquanto não houver pagamento registrado.</p><div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void saveDebt()}>{busy?"Salvando…":editing?"Salvar alterações":"Cadastrar dívida"}</button><button className="secondary" onClick={reset}>Cancelar</button></div></section></div>;
+ return <div className="debt-page"><div className="page-heading"><div><span className="eyebrow">Obrigações acompanhadas separadamente</span><h1>Dívidas</h1><p className="form-intro">Registre o que ainda precisa ser resolvido, sem misturar com as despesas do mês.</p></div><button className="primary compact" onClick={newDebt}>+ Nova dívida</button></div><section className="panel debt-summary"><span>Saldo de dívidas em aberto</span><strong>{money(openBalance)}</strong><small>Não descontado do saldo disponível. O pagamento só entra no fluxo quando você o registra.</small></section>{error&&<div className="global-alert">{error}</div>}<div className="transaction-filters debt-filters">{[{id:"ACTIVE",label:"Em aberto"},{id:"NEGOTIATED",label:"Negociadas"},{id:"PAID",label:"Quitadas"},{id:"ARCHIVED",label:"Arquivadas"},{id:"ALL",label:"Todas"}].map(f=><button key={f.id} className={statusFilter===f.id?"active":""} onClick={()=>setStatusFilter(f.id)}>{f.label}</button>)}</div><section className="panel debt-list">{activeDebts.length===0?<Empty text="Nenhuma dívida nesta categoria. Cadastre uma dívida para não perder esse compromisso de vista."/>:activeDebts.map(d=>{const owner=data.people.find(p=>p.id===d.ownerPersonId);const paymentTransactions=data.transactions.filter(tx=>tx.debtId===d.id);return <article className="debt-card" key={d.id}><div className="debt-card-head"><div><strong>{d.creditor}</strong><span>{d.description||"Sem descrição"}{owner?" · "+owner.name:""}</span></div><strong>{money(d.balanceDueCents)}</strong></div><div className="debt-meta"><span>Valor original: {money(d.originalAmountCents)}</span><span>Prioridade: {d.priority==="LOW"?"Baixa":d.priority==="MEDIUM"?"Média":"Alta"}</span><span>{d.dueDate?"Vencimento: "+d.dueDate:"Sem vencimento definido"}</span></div>{d.notes&&<p className="debt-notes">{d.notes}</p>}{paymentTransactions.length>0&&<details className="debt-payment-history"><summary>Histórico de pagamentos ({paymentTransactions.length})</summary>{paymentTransactions.sort((a,b)=>b.date.localeCompare(a.date)).map(tx=><div className="debt-payment-history-row" key={tx.id}><span>{tx.date} · {tx.description}</span><strong>{money(tx.amountCents)}</strong></div>)}</details>}<div className="row-actions debt-actions">{(d.status==="OPEN"||d.status==="NEGOTIATED")&&d.balanceDueCents>0&&<button className="primary compact" onClick={()=>{setPaymentDebtId(paymentDebtId===d.id?null:d.id);setPaymentAmount("");setPaymentAccountId("");setPaymentDate(todayFinancialDate());setError("")}}>Registrar pagamento</button>}{d.status!=="PAID"&&d.status!=="ARCHIVED"&&<button className="link-button" onClick={()=>editDebt(d)}>Editar</button>}{d.status==="OPEN"&&<button className="link-button" onClick={()=>void changeStatus(d,"NEGOTIATED")} disabled={busy}>Marcar negociada</button>}{d.status==="NEGOTIATED"&&<button className="link-button" onClick={()=>void changeStatus(d,"OPEN")} disabled={busy}>Voltar para em aberto</button>}{d.status!=="ARCHIVED"&&d.status!=="PAID"&&<button className="link-button danger" onClick={()=>void changeStatus(d,"ARCHIVED")} disabled={busy}>Arquivar</button>}</div>{paymentDebtId===d.id&&<div className="debt-payment-form"><label>Valor pago<input inputMode="decimal" value={paymentAmount} onChange={e=>setPaymentAmount(e.target.value)} placeholder="0,00"/></label><label>Conta de saída<select value={paymentAccountId} onChange={e=>setPaymentAccountId(e.target.value)}><option value="">Selecione uma conta</option>{data.accounts.filter(a=>a.active).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Data do pagamento<input type="date" value={paymentDate} onChange={e=>setPaymentDate(e.target.value)}/></label><div className="form-actions"><button className="primary compact" disabled={busy} onClick={()=>void payDebt(d)}>{busy?"Salvando…":"Confirmar pagamento"}</button><button className="secondary compact" onClick={()=>setPaymentDebtId(null)}>Cancelar</button></div></div>}</article>})}</section></div>;
+}
+
+function More({data,family,onChange,onSignOut,defaultSection="smart",syncStatus}:{data:EntityCollection;family:Family;onChange:(next:EntityCollection)=>Promise<void>;onSignOut:()=>Promise<void>;defaultSection?:"menu"|"smart"|"receipt"|"pots"|"recurring"|"budgets"|"debts"|"assistant"|"people"|"categories"|"settings";syncStatus:"syncing"|"synced"|"conflict"|"error"}) {
+ const [section,setSection]=useState<"menu"|"smart"|"receipt"|"pots"|"recurring"|"budgets"|"debts"|"assistant"|"people"|"categories"|"settings">(defaultSection);
+ const tools=[{id:"smart",label:"Entrada inteligente",description:"Registrar por texto ou voz",icon:"sparkles"},{id:"receipt",label:"Ler recibo",description:"Capturar dados de uma nota",icon:"scan"},{id:"pots",label:"Caixinhas",description:"Separar dinheiro por objetivo",icon:"target"},{id:"recurring",label:"Recorrências",description:"Organizar pagamentos repetidos",icon:"repeat"},{id:"budgets",label:"Orçamentos",description:"Definir limites por categoria",icon:"chart"},{id:"debts",label:"Dívidas",description:"Registrar obrigações para pagar depois",icon:"wallet"},{id:"assistant",label:"Assistente",description:"Consultar a saúde financeira",icon:"brain"},{id:"people",label:"Pessoas",description:"Organizar membros da família",icon:"users"},{id:"categories",label:"Categorias",description:"Classificar entradas e gastos",icon:"shapes"},{id:"settings",label:"Configurações",description:"Backup, convite e segurança",icon:"settings"}] as const;
+ const content=section==="smart"?<SmartInput data={data} onChange={onChange}/>:section==="receipt"?<ReceiptScanner data={data} onChange={onChange}/>:section==="pots"?<Pots data={data} onChange={onChange}/>:section==="recurring"?<Recurring data={data} onChange={onChange}/>:section==="budgets"?<Budgets data={data} onChange={onChange}/>:section==="debts"?<Debts data={data} onChange={onChange}/>:section==="assistant"?<Assistant data={data}/>:section==="people"?<People data={data} onChange={onChange}/>:section==="categories"?<Categories data={data} onChange={onChange}/>:<Settings data={data} family={family} onChange={onChange} onSignOut={onSignOut} syncStatus={syncStatus}/>;
  const selectedTool=tools.find(item=>item.id===section);
  if(section==="menu")return <div className="page-content more-page"><div className="more-heading"><div><span className="eyebrow">Ferramentas e organização</span><h1>Mais ferramentas</h1><p className="more-intro">Escolha uma área para abrir em tela inteira.</p></div></div><div className="more-menu-grid" aria-label="Ferramentas do aplicativo">{tools.map(item=><button key={item.id} className="more-menu-card" onClick={()=>setSection(item.id)}><span className={`more-menu-icon tool-icon-${item.icon}`} aria-hidden="true"><ToolIcon name={item.icon}/></span><span className="more-menu-copy"><strong>{item.label}</strong><small>{item.description}</small></span><span className="more-menu-arrow" aria-hidden="true"><ToolIcon name="chevron"/></span></button>)}</div></div>;
  return <div className="page-content more-page more-detail-page"><div className="more-detail-top"><button className="more-back-button" type="button" onClick={()=>setSection("menu")}><ToolIcon name="back"/> <span>Mais ferramentas</span></button><div className="more-detail-title"><span className={`more-menu-icon tool-icon-${selectedTool?.icon}`} aria-hidden="true"><ToolIcon name={selectedTool?.icon??"settings"}/></span><div><span className="eyebrow">Ferramentas e organização</span><h1>{selectedTool?.label}</h1><p className="more-intro">{selectedTool?.description}</p></div></div></div><div className="more-detail-content">{content}</div></div>;
 }
 
 function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityCollection)=>Promise<void>}) {
- const [editing,setEditing]=useState<CreditCard|null>(null),[name,setName]=useState(""),[accountId,setAccountId]=useState(""),[limit,setLimit]=useState(""),[closingDay,setClosingDay]=useState("10"),[dueDay,setDueDay]=useState("20"),[busy,setBusy]=useState(false),[error,setError]=useState(""),[expandedCardId,setExpandedCardId]=useState<string|null>(null),[selectedInvoiceByCard,setSelectedInvoiceByCard]=useState<Record<string,string>>({});
+ const [editing,setEditing]=useState<CreditCard|null>(null),[name,setName]=useState(""),[accountId,setAccountId]=useState(""),[limit,setLimit]=useState(""),[closingDay,setClosingDay]=useState("10"),[dueDay,setDueDay]=useState("20"),[busy,setBusy]=useState(false),[error,setError]=useState(""),[expandedCardId,setExpandedCardId]=useState<string|null>(null),[selectedInvoiceByCard,setSelectedInvoiceByCard]=useState<Record<string,string>>({}),[formOpen,setFormOpen]=useState(false);
  const accounts=data.accounts;
- function reset(){setEditing(null);setName("");setAccountId("");setLimit("");setClosingDay("10");setDueDay("20");setError("")}
- function edit(c:CreditCard){setEditing(c);setName(c.name);setAccountId(c.accountId);setLimit((c.creditLimitCents/100).toFixed(2).replace(".",","));setClosingDay(String(c.closingDay));setDueDay(String(c.dueDay));setError("")}
+ function reset(){setEditing(null);setName("");setAccountId("");setLimit("");setClosingDay("10");setDueDay("20");setError("");setFormOpen(false)}
+  function openNew(){reset();setFormOpen(true)}
+ function edit(c:CreditCard){setEditing(c);setName(c.name);setAccountId(c.accountId);setLimit((c.creditLimitCents/100).toFixed(2).replace(".",","));setClosingDay(String(c.closingDay));setDueDay(String(c.dueDay));setError("");setFormOpen(true)}
  async function save(){setError("");try{const cents=parseAmount(limit),close=Number(closingDay),due=Number(dueDay);if(!name.trim()||!accountId||!Number.isInteger(close)||close<1||close>31||!Number.isInteger(due)||due<1||due>31)throw new Error("Preencha nome, conta e dias válidos.");const card:CreditCard={id:editing?.id??crypto.randomUUID(),name:name.trim(),accountId,creditLimitCents:cents,closingDay:close,dueDay:due,active:true};if(editing){validateCreditCardUpdate(editing,card,data.accounts.map(a=>a.id),data.transactions)}else{validateCreditCard(card,data.accounts.filter(a=>a.active).map(a=>a.id))}const next={...data,cards:editing?data.cards.map(c=>c.id===card.id?card:c):[...data.cards,card]};setBusy(true);await onChange(next);reset()}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar o cartão.")}finally{setBusy(false)}}
- async function archive(c:CreditCard){if(!confirm("Arquivar este cartão? O histórico será preservado."))return;try{validateCreditCardArchive(c,data.recurringRules)}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");return;}setBusy(true);setError("");try{await onChange({...data,cards:data.cards.map(x=>x.id===c.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
+ async function archive(c:CreditCard){if(!await styledConfirm("Arquivar este cartão? O histórico será preservado."))return;try{validateCreditCardArchive(c,data.recurringRules)}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.");return;}setBusy(true);setError("");try{await onChange({...data,cards:data.cards.map(x=>x.id===c.id?{...x,active:false}:x)})}catch(e){setError(e instanceof Error?e.message:"Não foi possível arquivar.")}finally{setBusy(false)}}
  async function reactivate(c:CreditCard){
    const account=data.accounts.find(a=>a.id===c.accountId);
    if(!account?.active){setError("A conta vinculada ao cartão está arquivada. Reative a conta antes de reativar o cartão.");return;}
@@ -937,7 +1148,7 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
    const allocatedByClosing=new Map<string,number>();
    for(const allocation of allocations) allocatedByClosing.set(allocation.closingDate,(allocatedByClosing.get(allocation.closingDate)??0)+allocation.amountCents);
    for(const tx of data.transactions){
-     if(tx.status!=="PAID"||tx.creditCardId!==c.id||tx.type!=="EXPENSE")continue;
+     if(tx.status==="CANCELLED"||tx.creditCardId!==c.id||tx.type!=="EXPENSE")continue;
      const closing=invoiceClosingDate(tx.date,c.closingDay);
      if(closing<currentClosing)continue;
      const due=invoiceDueDateFromClosing(closing,c.closingDay,c.dueDay);
@@ -973,12 +1184,12 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
    return selectedInvoiceByCard[c.id]&&rows.some(row=>row.closingDate===selectedInvoiceByCard[c.id]) ? selectedInvoiceByCard[c.id] : rows[0]?.closingDate;
  }
  return <div className="page-content"><div className="page-heading"><div><span className="eyebrow">Crédito</span><h1>Cartões</h1></div><button className="primary compact" onClick={reset}>+ Novo cartão</button></div>{error&&<div className="global-alert">{error}</div>}
- <section className="card-grid">{data.cards.filter(c=>c.active).length===0?<section className="panel"><Empty text="Nenhum cartão cadastrado."/></section>:data.cards.filter(c=>c.active).map(c=>{const available=calculateCardAvailableLimit(c,data.transactions),outstanding=calculateCardOutstanding(c,data.transactions),credit=calculateCardCreditBalance(c,data.transactions),inv=getCardInvoice(c,data.transactions,todayFinancialDate()),rows=invoiceRows(c),selectedClosing=selectInvoice(c,rows),selected=rows.find(row=>row.closingDate===selectedClosing)??rows[0],expanded=expandedCardId===c.id;return <article className="panel card-item" key={c.id}><div className="card-item-head"><div><strong>{c.name}</strong><span>Fecha dia {c.closingDay} · vence dia {c.dueDay}</span></div><strong>{money(available)}</strong></div><div className="card-metrics"><div><span>Limite</span><strong>{money(c.creditLimitCents)}</strong></div><div><span>Em aberto</span><strong>{money(outstanding)}</strong></div><div><span>Fatura atual</span><strong>{money(inv.openAmountCents)}</strong></div><div><span>Crédito a favor</span><strong>{money(credit)}</strong></div></div><small>Fechamento: {inv.closingDate} · Vencimento: {inv.dueDate}</small><div className="row-actions card-actions"><button className="primary compact" disabled={busy||inv.openAmountCents<=0} onClick={()=>void payInvoice(c)}>Pagar fatura</button><button className="secondary compact" onClick={()=>setExpandedCardId(expanded?null:c.id)}>{expanded?"Ocultar faturas":"Ver faturas"}</button><button className="link-button" onClick={()=>edit(c)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(c)}>Arquivar</button></div>{expanded&&<section className="panel form-panel"><div className="section-title"><div><h2>Consultar fatura por mês</h2><span>Veja quanto está comprometido e quais lançamentos formam cada mês.</span></div></div><label>Mês da fatura<select value={selectedClosing??""} onChange={e=>setSelectedInvoiceByCard(prev=>({...prev,[c.id]:e.target.value}))}>{rows.map((row,index)=><option key={row.closingDate} value={row.closingDate}>{invoiceLabel(row.closingDate,index)} — {money(row.amountCents)}</option>)}</select></label>{selected&&<><div className="hero-card"><span>Total a pagar neste mês</span><strong>{money(selected.amountCents)}</strong><small>Fecha {new Date(selected.closingDate+"T12:00:00").toLocaleDateString("pt-BR")} · vence {new Date(selected.dueDate+"T12:00:00").toLocaleDateString("pt-BR")}</small></div><div className="section-title"><h3>Lançamentos</h3><span>{selected.transactions.length} lançamento(s)</span></div>{selected.transactions.length===0?<Empty text="Nenhum lançamento previsto para este mês."/>:<div className="account-list">{selected.transactions.map(tx=><div className="account-row" key={tx.id}><div><strong>{tx.description||"Compra no cartão"}</strong><span>{new Date(tx.date+"T12:00:00").toLocaleDateString("pt-BR")}{tx.installmentGroupId? ` · Parcela ${getInstallmentNumber(data.installmentGroups.find(group=>group.id===tx.installmentGroupId)!,tx.id)}`:""}</span></div><strong>{money(tx.amountCents)}</strong></div>)}</div>}<p className="form-note">O total considera pagamentos já alocados. Parcelas futuras já lançadas aparecem no mês correspondente; compras ainda não lançadas não aparecem.</p></>}</section>}</article>})}</section>
+ <section className="card-grid">{data.cards.filter(c=>c.active).length===0?<section className="panel"><Empty text="Nenhum cartão cadastrado."/></section>:data.cards.filter(c=>c.active).map(c=>{const available=calculateCardAvailableLimit(c,data.transactions),outstanding=calculateCardOutstanding(c,data.transactions),credit=calculateCardCreditBalance(c,data.transactions),inv=getCardInvoice(c,data.transactions,todayFinancialDate()),rows=invoiceRows(c),currentInvoiceAmount=rows.find(row=>row.closingDate===invoiceClosingDate(todayFinancialDate(),c.closingDay))?.amountCents??inv.openAmountCents,selectedClosing=selectInvoice(c,rows),selected=rows.find(row=>row.closingDate===selectedClosing)??rows[0],expanded=expandedCardId===c.id;return <article className="panel card-item" key={c.id}><div className="card-item-head"><div><strong>{c.name}</strong><span>Fecha dia {c.closingDay} · vence dia {c.dueDay}</span></div><strong>{money(available)}</strong></div><div className="card-metrics"><div><span>Limite</span><strong>{money(c.creditLimitCents)}</strong></div><div><span>Em aberto</span><strong>{money(outstanding)}</strong></div><div><span>Fatura atual + previstas</span><strong>{money(currentInvoiceAmount)}</strong></div><div><span>Crédito a favor</span><strong>{money(credit)}</strong></div></div><small>Fechamento: {inv.closingDate} · Vencimento: {inv.dueDate}</small><div className="row-actions card-actions"><button className="primary compact" disabled={busy||inv.openAmountCents<=0} onClick={()=>void payInvoice(c)}>Pagar fatura</button><button className="secondary compact" onClick={()=>setExpandedCardId(expanded?null:c.id)}>{expanded?"Ocultar faturas":"Ver faturas"}</button><button className="link-button" onClick={()=>edit(c)}>Editar</button><button className="link-button danger" disabled={busy} onClick={()=>void archive(c)}>Arquivar</button></div>{expanded&&<section className="panel form-panel invoice-detail"><div className="section-title"><div><h2>Consultar fatura por mês</h2><span>Veja quanto está comprometido e quais lançamentos formam cada mês.</span></div></div><label>Mês da fatura<select value={selectedClosing??""} onChange={e=>setSelectedInvoiceByCard(prev=>({...prev,[c.id]:e.target.value}))}>{rows.map((row,index)=><option key={row.closingDate} value={row.closingDate}>{invoiceLabel(row.closingDate,index)} — {money(row.amountCents)}</option>)}</select></label>{selected&&<><div className="hero-card"><span>Total da fatura e compras previstas</span><strong>{money(selected.amountCents)}</strong><small>Fecha {new Date(selected.closingDate+"T12:00:00").toLocaleDateString("pt-BR")} · vence {new Date(selected.dueDate+"T12:00:00").toLocaleDateString("pt-BR")}</small></div><div className="section-title"><h3>Lançamentos</h3><span>{selected.transactions.length} lançamento(s)</span></div>{selected.transactions.length===0?<Empty text="Nenhum lançamento previsto para este mês."/>:<div className="account-list invoice-transaction-list">{selected.transactions.map(tx=><div className="account-row invoice-transaction-row" key={tx.id}><div className="invoice-transaction-info"><strong>{tx.description||"Compra no cartão"}</strong><span>{new Date(tx.date+"T12:00:00").toLocaleDateString("pt-BR")}{tx.installmentGroupId? ` · Parcela ${getInstallmentNumber(data.installmentGroups.find(group=>group.id===tx.installmentGroupId)!,tx.id)}`:""} · {tx.status==="PLANNED"?"Prevista":tx.status==="PENDING"?"Pendente":"Compra registrada"}</span></div><strong className="invoice-transaction-amount">{money(tx.amountCents)}</strong></div>)}</div>}<p className="form-note">O total considera pagamentos já alocados. Parcelas futuras já lançadas aparecem no mês correspondente; compras ainda não lançadas não aparecem.</p></>}</section>}</article>})}</section>
  <section className="panel archived-panel"><div className="section-title"><div><h2>Cartões arquivados</h2><span>O histórico e as faturas anteriores permanecem preservados.</span></div></div><div className="card-grid">{data.cards.filter(c=>!c.active).map(c=>{const account=data.accounts.find(a=>a.id===c.accountId);return <article className="panel card-item" key={c.id}><div className="card-item-head"><div><strong>{c.name}</strong><span>Conta de pagamento: {account?.name??"Conta não encontrada"}{account?.active?"":" · conta arquivada"}</span></div><span>Limite {money(c.creditLimitCents)}</span></div><div className="row-actions card-actions"><button className="secondary compact" disabled={busy} onClick={()=>void reactivate(c)}>Reativar</button></div></article>})}</div></section>
- <section className="panel form-panel"><h2>{editing?"Editar cartão":"Novo cartão"}</h2><div className="form-grid"><label>Nome<input value={name} onChange={e=>setName(e.target.value)} placeholder="Ex.: Visa principal"/></label><label>Conta para pagamento<select value={accountId} onChange={e=>setAccountId(e.target.value)}><option value="">Selecione</option>{accounts.filter(a=>a.active||a.id===editing?.accountId).map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label><label>Limite<input inputMode="decimal" value={limit} onChange={e=>setLimit(e.target.value)} placeholder="0,00"/></label><label>Dia de fechamento<input type="number" min="1" max="31" value={closingDay} onChange={e=>setClosingDay(e.target.value)}/></label><label>Dia de vencimento<input type="number" min="1" max="31" value={dueDay} onChange={e=>setDueDay(e.target.value)}/></label></div><div className="form-actions"><button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Salvando…":editing?"Salvar alterações":"Criar cartão"}</button>{editing&&<button className="secondary" onClick={reset}>Cancelar</button>}</div><p className="form-note">O limite disponível é derivado das compras e pagamentos registrados. O pagamento da fatura sai da conta vinculada.</p></section></div>
+ </div>
 }
 
-function ToolIcon({name}:{name:string}){const common={fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round" as const,strokeLinejoin:"round" as const};return <svg viewBox="0 0 24 24" aria-hidden="true" {...common}>{name==="sparkles"?<><path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3Z"/><path d="m19 14 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14Z"/></>:name==="scan"?<><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M7 12h10M12 7v10"/></>:name==="target"?<><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></>:name==="repeat"?<><path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></>:name==="chart"?<><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M7 15v2M12 10v7M17 7v10"/></>:name==="brain"?<><path d="M12 5a4 4 0 0 0-7 2.5A4.5 4.5 0 0 0 6 16a4 4 0 0 0 6 3.5V5Z"/><path d="M12 5a4 4 0 0 1 7 2.5A4.5 4.5 0 0 1 18 16a4 4 0 0 1-6 3.5M8 9c2 0 2 2 4 2M16 9c-2 0-2 2-4 2M8 15c2 0 2-1 4-1M16 15c-2 0-2-1-4-1"/></>:name==="users"?<><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-2a5.5 5.5 0 0 1 11 0v2M16 5.5a3 3 0 0 1 0 5.8M18 15a4.5 4.5 0 0 1 2.5 4"/></>:name==="shapes"?<><rect x="3" y="3" width="7" height="7" rx="2"/><circle cx="17" cy="6.5" r="3.5"/><path d="m6.5 14 4 7h-8l4-7ZM17 13v8M13 17h8"/></>:name==="settings"?<><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.1 1.8-1.8 3.1-2.1-.5a7.6 7.6 0 0 1-1.7 1l-.4 2h-3.6l-.4-2a7.6 7.6 0 0 1-1.7-1l-2.1.5-1.8-3.1 1.1-1.8a7.8 7.8 0 0 1 0-2L5 11.2l1.8-3.1 2.1.5a7.6 7.6 0 0 1 1.7-1l.4-2h3.6l.4 2a7.6 7.6 0 0 1 1.7 1l2.1-.5 1.8 3.1-1.1 1.8a7.8 7.8 0 0 1 0 2Z" transform="translate(-1 -1) scale(1.08)"/></>:name==="back"?<><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></>:name==="chevron"?<path d="m9 18 6-6-6-6"/>:<circle cx="12" cy="12" r="8"/>}</svg>}
+function ToolIcon({name}:{name:string}){const common={fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round" as const,strokeLinejoin:"round" as const};return <svg viewBox="0 0 24 24" aria-hidden="true" {...common}>{name==="sparkles"?<><path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3Z"/><path d="m19 14 .9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14Z"/></>:name==="scan"?<><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M7 12h10M12 7v10"/></>:name==="target"?<><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></>:name==="repeat"?<><path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></>:name==="chart"?<><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M7 15v2M12 10v7M17 7v10"/></>:name==="wallet"?<><rect x="3" y="6" width="18" height="15" rx="2"/><path d="M3 9h18M16 14h2"/></>:name==="brain"?<><path d="M12 5a4 4 0 0 0-7 2.5A4.5 4.5 0 0 0 6 16a4 4 0 0 0 6 3.5V5Z"/><path d="M12 5a4 4 0 0 1 7 2.5A4.5 4.5 0 0 1 18 16a4 4 0 0 1-6 3.5M8 9c2 0 2 2 4 2M16 9c-2 0-2 2-4 2M8 15c2 0 2-1 4-1M16 15c-2 0-2-1-4-1"/></>:name==="users"?<><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-2a5.5 5.5 0 0 1 11 0v2M16 5.5a3 3 0 0 1 0 5.8M18 15a4.5 4.5 0 0 1 2.5 4"/></>:name==="shapes"?<><rect x="3" y="3" width="7" height="7" rx="2"/><circle cx="17" cy="6.5" r="3.5"/><path d="m6.5 14 4 7h-8l4-7ZM17 13v8M13 17h8"/></>:name==="settings"?<><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.1 1.8-1.8 3.1-2.1-.5a7.6 7.6 0 0 1-1.7 1l-.4 2h-3.6l-.4-2a7.6 7.6 0 0 1-1.7-1l-2.1.5-1.8-3.1 1.1-1.8a7.8 7.8 0 0 1 0-2L5 11.2l1.8-3.1 2.1.5a7.6 7.6 0 0 1 1.7-1l.4-2h3.6l.4 2a7.6 7.6 0 0 1 1.7 1l2.1-.5 1.8 3.1-1.1 1.8a7.8 7.8 0 0 1 0 2Z" transform="translate(-1 -1) scale(1.08)"/></>:name==="back"?<><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></>:name==="chevron"?<path d="m9 18 6-6-6-6"/>:<circle cx="12" cy="12" r="8"/>}</svg>}
 
 function NavIcon({name}:{name:"home"|"wallet"|"arrows"|"card"|"chart"|"more"}){return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">{name==="home"?<><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>:name==="wallet"?<><rect x="3" y="5" width="18" height="15" rx="3"/><path d="M3 9h18"/><path d="M16 14h2"/></>:name==="arrows"?<><path d="M4 7h15l-3-3"/><path d="m19 7-3 3"/><path d="M20 17H5l3 3"/><path d="m5 17 3-3"/></>:name==="card"?<><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M3 10h18"/><path d="M6 15h4"/></>:name==="chart"?<><path d="M3 3v18h18"/><path d="m7 14 4-4 3 2 5-6"/></>:<><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>}</svg>}
 
@@ -989,9 +1200,23 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   const [theme,setTheme]=useState<"light"|"dark">(()=>localStorage.getItem("finance-theme")==="dark"?"dark":"light");
   useEffect(()=>{document.documentElement.dataset.theme=theme;localStorage.setItem("finance-theme",theme);},[theme]);
   function changeTheme(next:"light"|"dark"){setTheme(next);}
+  async function shareAppLink(){
+    const shareData={title:"Leme Familiar",text:"Organize as finanças da sua família com o Leme Familiar.",url:window.location.origin};
+    try{
+      if(navigator.share){await navigator.share(shareData);return;}
+      if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(shareData.url);await styledNotice("Link do Leme Familiar copiado. Agora é só enviar para quem você quiser.","Link copiado");return;}
+      window.prompt("Copie o link do Leme Familiar:",shareData.url);
+    }catch(error){
+      if(error instanceof DOMException&&error.name==="AbortError")return;
+      try{await navigator.clipboard.writeText(shareData.url);await styledNotice("Link do Leme Familiar copiado. Agora é só enviar para quem você quiser.","Link copiado");}
+      catch{window.prompt("Copie o link do Leme Familiar:",shareData.url);}
+    }
+  }
   const [quickMode,setQuickMode]=useState<"menu"|"smart"|"receipt">("menu");
+   const [transactionInitialView,setTransactionInitialView]=useState<"new"|"cashflow">("cashflow");
+  const [transactionLaunchRequest,setTransactionLaunchRequest]=useState(0);
   function openQuickAction(mode:"smart"|"receipt"|"manual"){
-    if(mode==="manual"){setPage("transacoes");return}
+    if(mode==="manual"){setTransactionInitialView("new");setTransactionLaunchRequest(n=>n+1);setPage("transacoes");return}
     setQuickMode(mode);setPage("mais")
   }
   const [data,setData]=useState<EntityCollection>(emptyData);
@@ -1017,7 +1242,7 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
         if (!localStorage.getItem(`legacy-migration-completed-${family.id}`) && !localStorage.getItem(`legacy-migration-dismissed-${family.id}`) && await hasLegacyDatabase()) {
           try { const oldData = await readLegacyLocalData(); if (!cancelled) setLegacyData(oldData); } catch {}
         }
-        const rawLocal:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules"),pots:await repo.list("pots"),potMovements:await repo.list("potMovements"),budgets:await repo.list("budgets")};
+        const rawLocal:EntityCollection={people:await repo.list("people"),categories:await repo.list("categories"),accounts:await repo.list("accounts"),cards:await repo.list("cards"),transactions:await repo.list("transactions"),installmentGroups:await repo.list("installmentGroups"),recurringRules:await repo.list("recurringRules"),pots:await repo.list("pots"),potMovements:await repo.list("potMovements"),budgets:await repo.list("budgets"),debts:await repo.list("debts")};
         const local:EntityCollection={...rawLocal,categories:normalizeCategoryEmojis(rawLocal.categories)};
         const syncMeta=await repo.getSyncMetadata();
         if(JSON.stringify(local.categories)!==JSON.stringify(rawLocal.categories)){await repo.replaceAll(local);}
@@ -1169,15 +1394,15 @@ function AppShell({user,family,onSignOut,onSwitchFamily}:{user:User;family:Famil
   }
   const content = page==="dashboard" ? <Dashboard data={data} onChange={persist} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/> :
     page==="contas" ? <Accounts data={data} onChange={persist}/> :
-    page==="transacoes" ? <Transactions data={data} onChange={persist}/> :
+    page==="transacoes" ? <Transactions key={`${transactionInitialView}-${transactionLaunchRequest}`} data={data} onChange={persist} initialView={transactionInitialView}/> :
     page==="cartoes" ? <Cards data={data} onChange={persist}/> :
     page==="mais" ? <More data={data} family={family} onChange={persist} onSignOut={onSignOut} defaultSection={quickMode} syncStatus={syncStatus}/> : page==="relatorios" ? <Reports data={data}/> :
     <Dashboard data={data} onChange={persist} onQuickAction={openQuickAction} hideValues={hideValues} onToggleHideValues={toggleHideValues} syncStatus={syncStatus} theme={theme} onThemeChange={changeTheme}/>;
   return <div className="shell">
-    <header className="topbar"><div><strong>Controle Familiar</strong><span>{family.name}</span></div><div className="topbar-actions"><button className="secondary compact" onClick={onSwitchFamily}>Trocar família</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
+    <header className="topbar"><div className="topbar-brand"><img src="/logo-mark.svg" alt="" /><div><strong>LEME FAMILIAR</strong><span>{family.name}</span></div></div><div className="topbar-actions"><button className="secondary compact share-app-button" onClick={()=>void shareAppLink()} aria-label="Compartilhar link do Leme Familiar" title="Compartilhar link do Leme Familiar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.4M8.7 13.3l6.6 4.4"/></svg><span>Compartilhar</span></button><button className="secondary compact switch-space-button" onClick={onSwitchFamily}>Trocar espaço</button><button className="icon-button" onClick={()=>void onSignOut()}>Sair</button></div></header>
     {legacyData && <section className="panel sync-conflict"><strong>Dados locais de uma versão anterior encontrados</strong><p>Encontramos dados salvos neste aparelho antes da separação por família. Eles não foram misturados automaticamente.</p><p>Se esta família já possui dados financeiros, não importe os dados antigos: a importação substitui o estado financeiro atual da família.</p><div className="form-actions"><button className="secondary compact" onClick={()=>{localStorage.setItem(`legacy-migration-dismissed-${family.id}`,"1");setLegacyData(null);}}>Ignorar</button><button className="primary compact" onClick={()=>{const old=legacyData;if(!old)return;const currentHasData=Object.values(data).some(items=>items.length>0);if(currentHasData){setError("A família atual já possui dados. Por segurança, os dados locais antigos não podem substituir esse estado automaticamente. Exporte um backup e faça a migração somente após confirmar que a família está vazia.");return;}void persist(old).then(()=>{localStorage.setItem(`legacy-migration-completed-${family.id}`,"1");setLegacyData(null)}).catch(e=>setError(e instanceof Error?e.message:"Não foi possível importar os dados antigos."));}}>Importar dados antigos</button></div></section>}
     {error && <div className="global-alert">{error}</div>}{conflict && <section className="panel sync-conflict"><strong>Conflito de sincronização</strong><p>Os dados deste aparelho e os dados online são diferentes. Não fazemos mesclagem automática de informações financeiras.</p><div className="form-actions"><button className="secondary compact" onClick={()=>void keepRemote()}>Usar dados online</button><button className="primary compact" onClick={()=>void keepLocal()}>Manter meus dados</button></div></section>}{loading ? <div className="loading">Carregando dados financeiros…</div> : content}
-    <nav className="bottom-nav">{([["dashboard","Início","home","Início"],["contas","Contas","wallet","Contas"],["transacoes","Lanç.","arrows","Lançamentos"],["cartoes","Cartões","card","Cartões"],["relatorios","Relat.","chart","Relatórios"],["mais","Mais","more","Mais ferramentas"]] as const).map(([key,label,icon,accessibleLabel])=><button className={page===key?"active":""} key={key} onClick={()=>{if(key==="mais")setQuickMode("menu");setPage(key)}} aria-current={page===key?"page":undefined} aria-label={accessibleLabel}><NavIcon name={icon}/><small>{label}</small></button>)}</nav>
+    <nav className="bottom-nav">{([["dashboard","Início","home","Início"],["contas","Contas","wallet","Contas"],["transacoes","Lanç.","arrows","Lançamentos"],["cartoes","Cartões","card","Cartões"],["relatorios","Relat.","chart","Relatórios"],["mais","Mais","more","Mais ferramentas"]] as const).map(([key,label,icon,accessibleLabel])=><button className={page===key?"active":""} key={key} onClick={()=>{if(key==="mais")setQuickMode("menu");if(key==="transacoes")setTransactionInitialView("cashflow");setPage(key)}} aria-current={page===key?"page":undefined} aria-label={accessibleLabel}><NavIcon name={icon}/><small>{label}</small></button>)}</nav>
   </div>;
 }
 
@@ -1186,7 +1411,13 @@ export default function App() {
   const [family,setFamily]=useState<Family|null>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
+  const [showSplash,setShowSplash]=useState(()=>sessionStorage.getItem("leme-splash-seen")!=="1");
   const authUserIdRef = useRef<string|null>(null);
+  useEffect(()=>{
+    if(!showSplash)return;
+    const timer=window.setTimeout(()=>{sessionStorage.setItem("leme-splash-seen","1");setShowSplash(false)},2800);
+    return ()=>window.clearTimeout(timer);
+  },[showSplash]);
   useEffect(()=>{
     let alive=true;
     getAuthState().then(async s=>{if(!alive)return;authUserIdRef.current=s.user?.id ?? null;setUser(s.user);if(s.user){const savedFamilyId=localStorage.getItem(`selected-family-${s.user.id}`);if(savedFamilyId){try{const families=await listMyFamilies();if(!alive)return;const savedFamily=families.find(f=>f.id===savedFamilyId);if(savedFamily)setFamily(savedFamily);else localStorage.removeItem(`selected-family-${s.user.id}`);}catch{localStorage.removeItem(`selected-family-${s.user.id}`)}}}if(alive)setLoading(false)}).catch(e=>{if(alive){setError(e instanceof Error?e.message:"Supabase não configurado.");setLoading(false)}});
@@ -1201,6 +1432,7 @@ export default function App() {
     });
     return ()=>{alive=false;subscription.data.subscription.unsubscribe()};
   },[]);
+  if(showSplash)return <SplashScreen/>;
   if(loading)return <div className="loading full">Carregando…</div>;
   if(error && !user)return <main className="auth-page"><section className="panel"><h1>Configuração necessária</h1><div className="alert error">{error}</div><p className="muted">Defina as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no ambiente do aplicativo.</p></section></main>;
   if(!user)return <AuthScreen onAuthenticated={setUser}/>;
