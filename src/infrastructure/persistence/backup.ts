@@ -108,6 +108,8 @@ export function validateBackup(input: unknown): FinanceBackup {
     if (!Number.isSafeInteger(account.openingBalanceCents)) {
       throw new Error("Invalid opening balance for account " + account.id);
     }
+    if (account.ownerPersonId && !personIds.has(account.ownerPersonId)) throw new Error("Account references an unknown person: " + account.id);
+    if (account.pixKeyType && !["CPF","PHONE","EMAIL","RANDOM","OTHER"].includes(account.pixKeyType)) throw new Error("Invalid Pix key type for account " + account.id);
   }
 
   for (const card of data.cards as CreditCard[]) {
