@@ -1,5 +1,5 @@
 import type { EntityCollection, EntityMap } from "./repository";
-import type { Account, CreditCard, Pot, PotMovement, RecurringRule, Transaction, Budget } from "../../domain/types/entities";
+import type { Account, CreditCard, Pot, PotMovement, RecurringRule, Transaction, Budget, Debt } from "../../domain/types/entities";
 import { validateAllTransactions } from "../../domain/transactions/financial-engine";
 
 export const BACKUP_SCHEMA_VERSION = 1;
@@ -21,7 +21,8 @@ const COLLECTIONS: (keyof EntityMap)[] = [
   "recurringRules",
   "pots",
   "potMovements",
-  "budgets"
+  "budgets",
+  "debts"
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -55,6 +56,7 @@ export function validateBackup(input: unknown): FinanceBackup {
   if (!("pots" in input.data)) input.data.pots = [];
   if (!("potMovements" in input.data)) input.data.potMovements = [];
   if (!("budgets" in input.data)) input.data.budgets = [];
+  if (!("debts" in input.data)) input.data.debts = [];
 
   for (const collection of COLLECTIONS) {
     assertArray(input.data[collection], collection);
@@ -67,6 +69,7 @@ export function validateBackup(input: unknown): FinanceBackup {
   const personIds = new Set(data.people.map(p => p.id));
   const categoryIds = new Set(data.categories.map(c => c.id));
   const installmentIds = new Set(data.installmentGroups.map(g => g.id));
+  const debtIds = new Set((data.debts ?? []).map(d => d.id));
   const allowedAccountTypes = new Set(["CHECKING", "SAVINGS", "DIGITAL", "CASH", "INVESTMENT"]);
   const allowedTransactionTypes = new Set(["INCOME", "EXPENSE", "TRANSFER", "CARD_PAYMENT"]);
   const allowedStatuses = new Set(["PENDING", "PAID", "RECEIVED", "PLANNED", "CANCELLED"]);
@@ -183,6 +186,11 @@ export function validateBackup(input: unknown): FinanceBackup {
   }
 
   const budgetCategoryIds = new Set(data.categories.map(c => c.id));
+  for (const debt of data.debts as Debt[]) {
+    if (typeof debt.creditor !== "string" || !debt.creditor.trim() || typeof debt.description !== "string" || !Number.isSafeInteger(debt.originalAmountCents) || debt.originalAmountCents < 0 || !Number.isSafeInteger(debt.balanceDueCents) || debt.balanceDueCents < 0 || debt.balanceDueCents > debt.originalAmountCents || !["LOW","MEDIUM","HIGH"].includes(debt.priority) || !["OPEN","NEGOTIATED","PAID","ARCHIVED"].includes(debt.status) || typeof debt.createdAt !== "string") throw new Error("Invalid debt " + debt.id);
+    if (debt.ownerPersonId && !personIds.has(debt.ownerPersonId)) throw new Error("Debt references an unknown person: " + debt.id);
+  }
+
   for (const budget of data.budgets as Budget[]) {
     if (
       typeof budget.month !== "string" || !/^\d{4}-\d{2}$/.test(budget.month) ||
@@ -211,6 +219,7 @@ export function validateBackup(input: unknown): FinanceBackup {
     if (tx.creditCardId && !cardIds.has(tx.creditCardId)) {
       throw new Error("Transaction " + tx.id + " references an unknown card");
     }
+    if (tx.debtId && !debtIds.has(tx.debtId)) throw new Error("Transaction " + tx.id + " references an unknown debt");
     if (tx.installmentGroupId && !installmentIds.has(tx.installmentGroupId)) {
       throw new Error("Transaction " + tx.id + " references an unknown installment group");
     }
@@ -287,6 +296,7 @@ export function emptyEntityCollection(): EntityCollection {
     recurringRules: [],
     pots: [],
     potMovements: [],
-    budgets: []
+    budgets: [],
+    debts: []
   };
 }
