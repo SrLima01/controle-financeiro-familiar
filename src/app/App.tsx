@@ -64,7 +64,7 @@ function projectedAccountBalanceUntil(accountId:string,data:EntityCollection,thr
   if(!account) return 0;
   let balance=account.openingBalanceCents;
   for(const tx of data.transactions) {
-    if(tx.status==="CANCELLED" || (throughDate && tx.date>throughDate)) continue;
+    if(tx.status==="CANCELLED" || (throughDate && transactionPeriodDate(tx)>throughDate)) continue;
     const validStatus=tx.status==="PENDING"||tx.status==="PLANNED"||(tx.type==="INCOME"?tx.status==="RECEIVED":tx.status==="PAID");
     if(!validStatus) continue;
     if(tx.type==="INCOME" && tx.accountId===accountId) balance+=tx.amountCents;
@@ -213,7 +213,7 @@ function Dashboard({data,onChange,onQuickAction,hideValues,onToggleHideValues,sy
   const [planningPeriod,setPlanningPeriod]=useState(currentMonthKey());
   const periodOptions=useMemo(()=>{
     const months=new Set<string>([currentMonthKey()]);
-    data.transactions.forEach(tx=>months.add(tx.date.slice(0,7)));
+    data.transactions.forEach(tx=>[tx.date,tx.dueDate,tx.paidDate,tx.scheduledDate].filter((value):value is string=>!!value).forEach(value=>months.add(value.slice(0,7))));
     return [...months].sort();
   },[data.transactions]);
 
@@ -221,7 +221,7 @@ function Dashboard({data,onChange,onQuickAction,hideValues,onToggleHideValues,sy
   const throughDate=planningPeriod==="ALL" ? undefined : monthEndDate(planningPeriod);
   const projected=useMemo(()=>data.accounts.filter(a=>a.active).reduce((sum,a)=>sum+projectedAccountBalanceUntil(a.id,data,throughDate),0),[data,throughDate]);
   const planned=useMemo(()=>data.transactions
-    .filter(t=>(planningPeriod==="ALL"||t.date.startsWith(planningPeriod))&&(t.status==="PENDING"||t.status==="PLANNED"))
+    .filter(t=>(planningPeriod==="ALL"||transactionPeriodDate(t).startsWith(planningPeriod))&&(t.status==="PENDING"||t.status==="PLANNED"))
     .reduce((sum,t)=>sum+((t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0),[data.transactions,planningPeriod]);
   const monthKey=currentMonthKey();
   const realizedIncome=useMemo(()=>data.transactions.filter(t=>(t.paidDate??t.date).startsWith(monthKey)&&t.type==="INCOME"&&t.status==="RECEIVED").reduce((sum,t)=>sum+t.amountCents,0),[data.transactions,monthKey]);
