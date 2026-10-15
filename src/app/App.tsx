@@ -542,7 +542,7 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
    const query=searchText.trim().toLocaleLowerCase("pt-BR");
    if(query){const category=data.categories.find(c=>c.id===t.categoryId)?.name??"";const account=data.accounts.find(a=>a.id===t.accountId)?.name??"";const destination=data.accounts.find(a=>a.id===t.destinationAccountId)?.name??"";if(![t.description,category,account,destination].some(value=>value.toLocaleLowerCase("pt-BR").includes(query)))return false;}
    return true;
- }).sort((a,b)=>b.date.localeCompare(a.date));
+ }).sort((a,b)=>transactionPeriodDate(b).localeCompare(transactionPeriodDate(a)));
  const periodBaseVisible=selectedMonth==="ALL"?visible:visible.filter(t=>transactionPeriodDate(t).startsWith(selectedMonth));
  const periodVisible=summaryFilter==="ALL"?periodBaseVisible:periodBaseVisible.filter(t=>summaryFilter==="INCOME_RECEIVED"?(t.type==="INCOME"&&t.status==="RECEIVED"):(((t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT")&&t.status==="PAID"));
  const cashflowReceived=periodBaseVisible.filter(t=>t.type==="INCOME"&&t.status==="RECEIVED").reduce((sum,t)=>sum+t.amountCents,0);
