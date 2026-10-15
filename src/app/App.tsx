@@ -224,13 +224,13 @@ function Dashboard({data,onChange,onQuickAction,hideValues,onToggleHideValues,sy
     .filter(t=>(planningPeriod==="ALL"||t.date.startsWith(planningPeriod))&&(t.status==="PENDING"||t.status==="PLANNED"))
     .reduce((sum,t)=>sum+((t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT"?-t.amountCents:t.type==="INCOME"?t.amountCents:0),0),[data.transactions,planningPeriod]);
   const monthKey=currentMonthKey();
-  const realizedIncome=useMemo(()=>data.transactions.filter(t=>t.date.startsWith(monthKey)&&t.type==="INCOME"&&t.status==="RECEIVED").reduce((sum,t)=>sum+t.amountCents,0),[data.transactions,monthKey]);
+  const realizedIncome=useMemo(()=>data.transactions.filter(t=>(t.paidDate??t.date).startsWith(monthKey)&&t.type==="INCOME"&&t.status==="RECEIVED").reduce((sum,t)=>sum+t.amountCents,0),[data.transactions,monthKey]);
   const realizedExpense=useMemo(()=>data.transactions.filter(t=>t.date.startsWith(monthKey)&&t.type==="EXPENSE"&&t.status==="PAID").reduce((sum,t)=>sum+t.amountCents,0),[data.transactions,monthKey]);
   const monthNet=realizedIncome-realizedExpense;
   const today=todayFinancialDate();
   const dueHorizon=new Date(); dueHorizon.setDate(dueHorizon.getDate()+7);
   const dueHorizonDate=`${dueHorizon.getFullYear()}-${String(dueHorizon.getMonth()+1).padStart(2,"0")}-${String(dueHorizon.getDate()).padStart(2,"0")}`;
-  const dueTransactions=useMemo(()=>data.transactions.filter(t=>(t.type==="EXPENSE"||t.type==="INCOME")&&(t.status==="PENDING"||t.status==="PLANNED")&&(t.scheduledDate??t.date)<=dueHorizonDate).sort((a,b)=>(a.scheduledDate??a.date).localeCompare(b.scheduledDate??b.date)).slice(0,8),[data.transactions,dueHorizonDate]);
+  const dueTransactions=useMemo(()=>data.transactions.filter(t=>(t.type==="EXPENSE"||t.type==="INCOME")&&(t.status==="PENDING"||t.status==="PLANNED")&&(t.dueDate??t.scheduledDate??t.date)<=dueHorizonDate).sort((a,b)=>(a.dueDate??a.scheduledDate??a.date).localeCompare(b.dueDate??b.scheduledDate??b.date)).slice(0,8),[data.transactions,dueHorizonDate]);
   const categorySpend=useMemo(()=>{
     const totals=new Map<string,number>();
     for(const t of data.transactions) if(t.type==="EXPENSE"&&t.status==="PAID"&&t.date.startsWith(monthKey)&&t.categoryId) totals.set(t.categoryId,(totals.get(t.categoryId)??0)+t.amountCents);
@@ -271,7 +271,7 @@ function Dashboard({data,onChange,onQuickAction,hideValues,onToggleHideValues,sy
     </div>
     <section className="panel dashboard-due-panel"><div className="section-title"><div><h2>Vencimentos e recebimentos</h2><span>Atrasados e movimentações previstas para os próximos 7 dias.</span></div><span>{dueTransactions.length} pendentes</span></div>
       {actionError&&<div className="global-alert">{actionError}</div>}
-      {dueTransactions.length===0?<Empty text="Nenhum pagamento ou recebimento pendente nos próximos dias."/>:<div className="due-list">{dueTransactions.map(t=>{const dueDate=t.scheduledDate??t.date;const overdue=dueDate<today;const category=data.categories.find(c=>c.id===t.categoryId);return <div className="due-row" key={t.id}><span className={`due-kind ${t.type==="INCOME"?"due-income":"due-expense"}`} aria-hidden="true">{t.type==="INCOME"?"↙":"↗"}</span><div className="due-copy"><strong>{t.description|| (t.type==="INCOME"?"Recebimento":"Pagamento")}</strong><small>{overdue?"Atrasado":dueDate===today?"Vence hoje":`Vence ${dateLabel(dueDate)}`}{category? ` · ${category.name}`:""} · {t.status==="PLANNED"?"Planejado":"Pendente"}</small></div><strong className={t.type==="INCOME"?"money-positive":"money-negative"}>{displayMoney(t.amountCents,hideValues)}</strong><button className="settle-icon-button" title={t.type==="INCOME"?"Confirmar recebimento":"Confirmar pagamento"} aria-label={t.type==="INCOME"?"Marcar como recebido":"Marcar como pago"} onClick={()=>void settleDue(t)}>✓</button></div>})}</div>}
+      {dueTransactions.length===0?<Empty text="Nenhum pagamento ou recebimento pendente nos próximos dias."/>:<div className="due-list">{dueTransactions.map(t=>{const dueDate=t.dueDate??t.scheduledDate??t.date;const overdue=dueDate<today;const category=data.categories.find(c=>c.id===t.categoryId);return <div className="due-row" key={t.id}><span className={`due-kind ${t.type==="INCOME"?"due-income":"due-expense"}`} aria-hidden="true">{t.type==="INCOME"?"↙":"↗"}</span><div className="due-copy"><strong>{t.description|| (t.type==="INCOME"?"Recebimento":"Pagamento")}</strong><small>{overdue?"Atrasado":dueDate===today?"Vence hoje":`Vence ${dateLabel(dueDate)}`}{category? ` · ${category.name}`:""} · {t.status==="PLANNED"?"Planejado":"Pendente"}</small></div><strong className={t.type==="INCOME"?"money-positive":"money-negative"}>{displayMoney(t.amountCents,hideValues)}</strong><button className="settle-icon-button" title={t.type==="INCOME"?"Confirmar recebimento":"Confirmar pagamento"} aria-label={t.type==="INCOME"?"Marcar como recebido":"Marcar como pago"} onClick={()=>void settleDue(t)}>✓</button></div>})}</div>}
     </section>
     <section className="panel dashboard-category-panel"><div className="section-title"><div><h2>Despesas por categoria</h2><span>Despesas pagas neste mês, da maior para a menor.</span></div></div>
       {categorySpend.length===0?<Empty text="Ainda não há despesas pagas categorizadas neste mês."/>:<div className="dashboard-category-list">{categorySpend.map(c=><div className="dashboard-category-row" key={c.id}><div><strong>{c.name}</strong><strong>{displayMoney(c.cents,hideValues)}</strong></div><div className="report-bar-track"><div className="report-bar-fill" style={{width:`${c.cents/maxCategorySpend*100}%`}}/></div></div>)}</div>}
@@ -530,7 +530,7 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
  useEffect(()=>{if(view==="new"){window.scrollTo({top:0,behavior:"smooth"});if(launchMode==="unique"){requestAnimationFrame(()=>editorRef.current?.scrollIntoView({behavior:"smooth",block:"start"}));}}},[view,launchMode]);
  const transactionAccountOptions=data.accounts.filter(a=>a.active||a.id===editing?.accountId||a.id===editing?.destinationAccountId),activeCards=data.cards.filter(c=>c.active),transactionCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),paymentCardOptions=data.cards.filter(c=>c.active||c.id===editing?.creditCardId),transactionPeopleOptions=data.people.filter(p=>p.active||p.id===editing?.personId);
  const recurringGenerated=!!editing&&data.recurringRules.some(rule=>rule.transactionIds.includes(editing.id));
- const monthOptions=[...new Set([todayFinancialDate().slice(0,7),...data.transactions.map(t=>t.date.slice(0,7))])].sort((a,b)=>b.localeCompare(a));
+ const monthOptions=[...new Set([todayFinancialDate().slice(0,7),...data.transactions.flatMap(t=>[t.date,t.dueDate,t.paidDate,t.scheduledDate].filter((value):value is string=>!!value).map(value=>value.slice(0,7)))])].sort((a,b)=>b.localeCompare(a));
  const visible=data.transactions.filter(t=>{
    if(summaryFilter==="INCOME_RECEIVED"&&!(t.type==="INCOME"&&t.status==="RECEIVED"))return false;
    if(summaryFilter==="CASH_OUTFLOW"&&!(((t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT")&&t.status==="PAID"))return false;
@@ -538,8 +538,9 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
    if(summaryFilter==="ALL"&&filterStatus!=="ALL"&&t.status!==filterStatus)return false;
    if(filterCategoryId&&t.categoryId!==filterCategoryId)return false;
    if(filterAccountId){const cardAccount=t.creditCardId?data.cards.find(c=>c.id===t.creditCardId)?.accountId:undefined;if(t.accountId!==filterAccountId&&t.destinationAccountId!==filterAccountId&&cardAccount!==filterAccountId)return false;}
-   if(fromDate&&t.date<fromDate)return false;
-   if(toDate&&t.date>toDate)return false;
+   const movementDate=transactionPeriodDate(t);
+   if(fromDate&&movementDate<fromDate)return false;
+   if(toDate&&movementDate>toDate)return false;
    const query=searchText.trim().toLocaleLowerCase("pt-BR");
    if(query){const category=data.categories.find(c=>c.id===t.categoryId)?.name??"";const account=data.accounts.find(a=>a.id===t.accountId)?.name??"";const destination=data.accounts.find(a=>a.id===t.destinationAccountId)?.name??"";if(![t.description,category,account,destination].some(value=>value.toLocaleLowerCase("pt-BR").includes(query)))return false;}
    return true;
