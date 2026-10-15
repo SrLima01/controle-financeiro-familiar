@@ -525,7 +525,7 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
  const editorRef=useRef<HTMLElement|null>(null);
  useEffect(()=>{if(editing){window.scrollTo({top:0,behavior:"smooth"});editorRef.current?.scrollIntoView({behavior:"smooth",block:"start"});}},[editing]);
  const [view,setView]=useState<"new"|"cashflow"|"metric">(initialView);
- const [selectedMetric,setSelectedMetric]=useState<"received"|"paid"|"planned-income"|"planned-out"|"realized-balance"|"projected-balance">("received");
+ const [selectedMetric,setSelectedMetric]=useState<"received"|"paid"|"planned-income"|"planned-out"|"realized-balance"|"total-real-balance"|"projected-balance">("received");
  const [launchMode,setLaunchMode]=useState<"unique"|"recurring">("unique");
  useEffect(()=>{setView(initialView);if(initialView==="new"){setEditing(null);setLaunchMode("unique");}},[initialView]);
  useEffect(()=>{if(view==="new"){window.scrollTo({top:0,behavior:"smooth"});if(launchMode==="unique"){requestAnimationFrame(()=>editorRef.current?.scrollIntoView({behavior:"smooth",block:"start"}));}}},[view,launchMode]);
