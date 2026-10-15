@@ -24,6 +24,9 @@ export function validateTransaction(tx:Transaction,data:FinancialData):void{
  const compatibleStatus=tx.status==="CANCELLED"||tx.status==="PENDING"||tx.status==="PLANNED"||(tx.type==="INCOME"?tx.status==="RECEIVED":tx.status==="PAID");
  if(!compatibleStatus)throw new Error("Transaction status is incompatible with transaction type");
  assertFinancialDate(tx.date);
+ if(tx.dueDate)assertFinancialDate(tx.dueDate);
+ if(tx.paidDate)assertFinancialDate(tx.paidDate);
+ if(tx.paidDate&&tx.status!=="PAID"&&tx.status!=="RECEIVED"&&tx.status!=="CANCELLED")throw new Error("Only realized or cancelled transactions may have a paidDate");
  assertNonNegativeCents(tx.amountCents);
  if(tx.amountCents<=0)throw new Error("Transaction amount must be greater than zero");
  if(!tx.description.trim())throw new Error("Transaction description is required");

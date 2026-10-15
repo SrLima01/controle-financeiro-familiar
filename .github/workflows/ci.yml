@@ -22,8 +22,12 @@ jobs:
         with:
           node-version: 20
 
+      - name: Pin npm to stable version
+        run: npm install --global npm@10.8.2
+      - name: Clear npm cache
+        run: npm cache clean --force
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund --legacy-peer-deps --prefer-online
 
       - name: Typecheck
         run: npm run typecheck

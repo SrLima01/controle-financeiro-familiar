@@ -33,6 +33,15 @@ describe("report engine",()=>{
   expect(cashFlow(data,"2026-09","REALIZED")).toEqual({month:"2026-09",incomeCents:0,expenseCents:0,cardPaymentsCents:4000,netCents:-4000});
  });
 
+ it("uses the actual payment date and the due date in cash flow reports",()=>{
+  const data={...base,transactions:[
+   {id:"paid-late",date:"2026-09-02",dueDate:"2026-09-10",paidDate:"2026-10-03",type:"EXPENSE" as const,status:"PAID" as const,amountCents:18000,description:"Conta de luz",accountId:"acc"},
+   {id:"pending-due",date:"2026-10-01",dueDate:"2026-10-12",type:"EXPENSE" as const,status:"PENDING" as const,amountCents:7000,description:"Internet",accountId:"acc"}
+  ]};
+  expect(cashFlow(data,"2026-09","REALIZED").expenseCents).toBe(0);
+  expect(cashFlow(data,"2026-10","REALIZED").expenseCents).toBe(18000);
+  expect(cashFlow(data,"2026-10","PROJECTED").expenseCents).toBe(25000);
+ });
  it("keeps a pending card purchase out of realized expense reports but includes it in projected reports",()=>{
   const data={...base,cards:[{id:"card",name:"Visa",accountId:"acc",creditLimitCents:100000,closingDay:10,dueDay:20,active:true}],transactions:[
    {id:"1",date:"2026-09-15",type:"EXPENSE" as const,status:"PENDING" as const,amountCents:2500,description:"Compra pendente",categoryId:"cat",creditCardId:"card"}

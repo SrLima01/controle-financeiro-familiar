@@ -16,8 +16,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Pin npm to stable version
+        run: npm install --global npm@10.8.2
+      - name: Clear npm cache
+        run: npm cache clean --force
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --legacy-peer-deps --prefer-online
       - name: Dependency security audit
         run: |
           npm audit --json > /tmp/npm-audit.json || true
