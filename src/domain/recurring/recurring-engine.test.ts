@@ -3,7 +3,7 @@ import { applyRecurringOccurrenceEdit, applyRecurringRuleToFutureTransactions, c
 import type { EntityCollection } from "../../infrastructure/persistence/repository";
 const accounts=[{id:"a",name:"Conta",type:"CHECKING" as const,openingBalanceCents:0,active:true}];
 const base={description:"Aluguel",frequency:"MONTHLY" as const,startDate:"2026-01-31",amountCents:100000,type:"EXPENSE" as const,status:"PLANNED" as const,accountId:"a",active:true};
-const empty=(rule:ReturnType<typeof createRecurringRule>):EntityCollection=>({people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[]});
+const empty=(rule:ReturnType<typeof createRecurringRule>):EntityCollection=>({people:[],categories:[],accounts,cards:[],transactions:[],installmentGroups:[],recurringRules:[rule],pots:[],potMovements:[],budgets:[],debts:[]});
 describe("recurring engine",()=>{
  it("rejects a recurring rule whose status does not match its type",()=>{expect(()=>createRecurringRule({...base,type:"INCOME",status:"PAID"})).toThrow("O status da recorrência não corresponde ao tipo de movimentação.");});
  it("rejects a zero-value recurring rule",()=>{expect(()=>createRecurringRule({...base,amountCents:0})).toThrow("maior que zero");});
