@@ -22,7 +22,7 @@ export function validateAccountUpdate(previous:Account,next:Account,transactions
 export function validateTransaction(tx:Transaction,data:FinancialData):void{
  if(!tx.id)throw new Error("Transaction id is required");
  const compatibleStatus=tx.status==="CANCELLED"||tx.status==="PENDING"||tx.status==="PLANNED"||(tx.type==="INCOME"?tx.status==="RECEIVED":tx.status==="PAID");
- if(!compatibleStatus)throw new Error("Transaction status is incompatible with transaction type");
+ if(!compatibleStatus)throw new Error("O status selecionado não é compatível com o tipo de lançamento.");
  assertFinancialDate(tx.date);
  if(tx.dueDate)assertFinancialDate(tx.dueDate);
  if(tx.paidDate)assertFinancialDate(tx.paidDate);
