@@ -32,7 +32,8 @@ const makeData = (transactions: EntityCollection["transactions"], installmentGro
   recurringRules: [],
   pots: [],
   potMovements: [],
-  budgets: []
+  budgets: [],
+  debts: []
 });
 
 describe("installment engine", () => {
