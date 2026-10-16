@@ -15,9 +15,8 @@ export function validateAccountArchive(account:Account,data:FinancialData,recurr
 export function validateAccountUpdate(previous:Account,next:Account,transactions:readonly Transaction[]):void{
  if(previous.id!==next.id)throw new Error("Conta inválida para edição");
  if(next.openingBalanceCents<0)throw new Error("Saldo inicial não pode ser negativo");
- if(previous.openingBalanceCents!==next.openingBalanceCents&&transactions.some(tx=>tx.status!=="CANCELLED"&&(tx.accountId===previous.id||tx.destinationAccountId===previous.id))){
-   throw new Error("O saldo inicial não pode ser alterado após haver movimentações na conta.");
- }
+ // Alterar o saldo de abertura é permitido: o saldo real é recalculado a partir dele e das movimentações existentes.
+ // O histórico não é modificado; a validação continua protegendo a identidade da conta e valores inválidos.
 }
 export function validateTransaction(tx:Transaction,data:FinancialData):void{
  if(!tx.id)throw new Error("Transaction id is required");
