@@ -380,9 +380,8 @@ function Accounts({data,onChange}:{data:EntityCollection;onChange:(next:EntityCo
     if(!name.trim()||!Number.isFinite(value)||value<0){setError("Informe nome e saldo inicial válido.");return;}
     const cents=Math.round(value*100); try{assertCents(cents,"openingBalanceCents")}catch(e){setError(e instanceof Error?e.message:"Valor inválido.");return;}
     const account:Account={id:editing?.id ?? crypto.randomUUID(),name:name.trim(),type,openingBalanceCents:cents,active:true,institution,ownerPersonId:ownerPersonId||undefined,holderName:holderName.trim()||undefined,pixKeyType:pixKey?pixKeyType:undefined,pixKey:pixKey.trim()||undefined,agency:agency.trim()||undefined,accountNumber:accountNumber.trim()||undefined,accountDigit:accountDigit.trim()||undefined};
-    if(editing) validateAccountUpdate(editing,account,data.transactions);
     const next={...data,accounts:editing?data.accounts.map(a=>a.id===account.id?account:a):[...data.accounts,account]};
-    setBusy(true);try{await onChange(next);reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false);}
+    setBusy(true);try{if(editing)validateAccountUpdate(editing,account,data.transactions);await onChange(next);reset();}catch(e){setError(e instanceof Error?e.message:"Não foi possível salvar.");}finally{setBusy(false);}
   }
   async function archive(a:Account){
     if(!await styledConfirm("Arquivar a conta \"" + a.name + "\"? O histórico será preservado."))return;
