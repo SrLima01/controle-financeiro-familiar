@@ -145,7 +145,7 @@ export function allocateCardPayments(
   const buckets = new Map<string, InvoiceBucket>();
 
   for (const tx of transactions) {
-    if (tx.status === "CANCELLED" || isFutureRecurringCardForecast(tx, referenceDate) || tx.creditCardId !== card.id || tx.type !== "EXPENSE") continue;
+    if (tx.status === "CANCELLED" || tx.status === "PLANNED" || isFutureRecurringCardForecast(tx, referenceDate) || tx.creditCardId !== card.id || tx.type !== "EXPENSE") continue;
     const closingDate = invoiceClosingDate(tx.date, card.closingDay);
     const existing = buckets.get(closingDate);
     if (existing) {
