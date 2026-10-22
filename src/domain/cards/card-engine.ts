@@ -241,7 +241,7 @@ export function calculateCardOutstanding(
   for (const tx of transactions) {
     // Realized invoice debt only. Future planned installments reserve
     // available credit separately in calculateCardAvailableLimit.
-    if (tx.status !== "CANCELLED" && !isFutureRecurringCardForecast(tx) && tx.creditCardId === card.id && tx.type === "EXPENSE") {
+    if ((tx.status === "PAID" || tx.status === "PENDING") && !isFutureRecurringCardForecast(tx) && tx.creditCardId === card.id && tx.type === "EXPENSE") {
       purchases += tx.amountCents;
     }
   }
