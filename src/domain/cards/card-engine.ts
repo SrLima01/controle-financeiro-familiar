@@ -46,6 +46,17 @@ export type CardInvoice = {
 };
 
 type InvoicePurchase = { date: string; amountCents: number };
+
+function localFinancialDate(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/** Future recurring card entries are forecasts, not posted purchases. */
+export function isFutureRecurringCardForecast(tx: Transaction, referenceDate = localFinancialDate()): boolean {
+  return Boolean(tx.scheduledDate && tx.scheduledDate > referenceDate &&
+    (tx.status === "PENDING" || tx.status === "PLANNED"));
+}
 type InvoiceBucket = {
   closingDate: string;
   dueDate: string;
@@ -129,11 +140,12 @@ export function invoiceDueDateFromClosing(
 export function allocateCardPayments(
   card: CreditCard,
   transactions: readonly Transaction[],
+  referenceDate = localFinancialDate(),
 ): CardPaymentAllocation[] {
   const buckets = new Map<string, InvoiceBucket>();
 
   for (const tx of transactions) {
-    if (tx.status !== "PAID" || tx.creditCardId !== card.id || tx.type !== "EXPENSE") continue;
+    if (tx.status === "CANCELLED" || isFutureRecurringCardForecast(tx, referenceDate) || tx.creditCardId !== card.id || tx.type !== "EXPENSE") continue;
     const closingDate = invoiceClosingDate(tx.date, card.closingDay);
     const existing = buckets.get(closingDate);
     if (existing) {
@@ -191,7 +203,8 @@ export function getCardInvoice(
   let purchases = 0;
   for (const tx of transactions) {
     if (
-      tx.status === "PAID" &&
+      tx.status !== "CANCELLED" &&
+      !isFutureRecurringCardForecast(tx, referenceDate) &&
       tx.creditCardId === card.id &&
       tx.type === "EXPENSE" &&
       tx.date > previousClose &&
@@ -201,7 +214,7 @@ export function getCardInvoice(
     }
   }
 
-  const allocations = allocateCardPayments(card, transactions)
+  const allocations = allocateCardPayments(card, transactions, referenceDate)
     .filter(allocation => allocation.closingDate === closing)
     .reduce((sum, allocation) => sum + allocation.amountCents, 0);
 
@@ -228,7 +241,7 @@ export function calculateCardOutstanding(
   for (const tx of transactions) {
     // Realized invoice debt only. Future planned installments reserve
     // available credit separately in calculateCardAvailableLimit.
-    if (tx.status === "PAID" && tx.creditCardId === card.id && tx.type === "EXPENSE") {
+    if (tx.status !== "CANCELLED" && !isFutureRecurringCardForecast(tx) && tx.creditCardId === card.id && tx.type === "EXPENSE") {
       purchases += tx.amountCents;
     }
   }
@@ -244,11 +257,10 @@ export function calculateCardAvailableLimit(
   card: CreditCard,
   transactions: readonly Transaction[],
 ): number {
-  // Available credit must reserve the full amount of every non-cancelled
-  // card purchase, including planned future installments. Invoice outstanding
-  // remains based on realized purchases only; these are separate concepts.
+  // Reserve card purchases and ordinary planned installments. Future recurring
+  // occurrences remain forecasts until their scheduled charge date.
   const committedPurchases = transactions
-    .filter(tx => tx.status !== "CANCELLED" && tx.creditCardId === card.id && tx.type === "EXPENSE")
+    .filter(tx => tx.status !== "CANCELLED" && !isFutureRecurringCardForecast(tx) && tx.creditCardId === card.id && tx.type === "EXPENSE")
     .reduce((sum, tx) => sum + tx.amountCents, 0);
   // Only payments allocated to purchases restore the corresponding limit.
   // Any excess remains a separate card credit; adding all payments here would
