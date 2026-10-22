@@ -200,6 +200,53 @@ describe("card engine", () => {
     expect(calculateCardAvailableLimit(card, transactions)).toBe(50000);
   });
 
+  it("uses the next month's due date for a purchase before a day-31 closing", () => {
+    const monthEndCard = { ...card, closingDay: 31, dueDay: 7 };
+    const purchase: Transaction = {
+      id: "october-purchase",
+      date: "2026-10-10",
+      type: "EXPENSE",
+      status: "PENDING",
+      amountCents: 12500,
+      description: "Compra de outubro",
+      creditCardId: card.id,
+    };
+    expect(invoiceClosingDate(purchase.date, 31)).toBe("2026-10-31");
+    expect(invoiceDueDateFromClosing("2026-10-31", 31, 7)).toBe("2026-11-07");
+    expect(getCardInvoice(monthEndCard, [purchase], "2026-10-15")).toMatchObject({
+      closingDate: "2026-10-31",
+      dueDate: "2026-11-07",
+      purchaseTotalCents: 12500,
+      openAmountCents: 12500,
+    });
+  });
+
+  it("does not count a future recurring card forecast in the invoice or available limit", () => {
+    const monthEndCard = { ...card, closingDay: 31, dueDay: 7 };
+    const actualPurchase: Transaction = {
+      id: "posted",
+      date: "2026-10-10",
+      type: "EXPENSE",
+      status: "PENDING",
+      amountCents: 12500,
+      description: "Compra registrada",
+      creditCardId: card.id,
+    };
+    const futureInternet: Transaction = {
+      id: "internet-forecast",
+      date: "2026-11-09",
+      scheduledDate: "2026-11-09",
+      type: "EXPENSE",
+      status: "PLANNED",
+      amountCents: 6000,
+      description: "Internet",
+      creditCardId: card.id,
+    };
+    expect(getCardInvoice(monthEndCard, [actualPurchase, futureInternet], "2026-10-15").purchaseTotalCents).toBe(12500);
+    expect(calculateCardAvailableLimit(monthEndCard, [actualPurchase, futureInternet])).toBe(87500);
+    expect(calculateCardOutstanding(monthEndCard, [actualPurchase, futureInternet])).toBe(12500);
+  });
+
   it("does not expose a negative available limit when debt exceeds the current limit", () => {
     const transactions = [makeCardTransaction(card.id, "purchase-1", "2026-09-05", "EXPENSE", 120000)];
     expect(calculateCardOutstanding(card, transactions)).toBe(120000);
