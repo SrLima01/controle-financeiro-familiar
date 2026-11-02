@@ -537,7 +537,7 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
    if(summaryFilter==="ALL"&&filter!=="ALL"&&t.type!==filter)return false;
    if(summaryFilter==="ALL"&&filterStatus!=="ALL"&&t.status!==filterStatus)return false;
    if(summaryFilter==="ALL"&&paymentMethodFilter!=="ALL"){
-     const matchesPayment=paymentMethodFilter==="CARD"?!!t.creditCardId:
+     const matchesPayment=paymentMethodFilter==="CARD"?!!t.creditCardId&&t.type==="EXPENSE":
        paymentMethodFilter==="UNSPECIFIED"?!t.creditCardId&&!t.paymentMethod&&(t.type==="INCOME"||t.type==="EXPENSE"):
        !t.creditCardId&&t.paymentMethod===paymentMethodFilter;
      if(!matchesPayment)return false;
