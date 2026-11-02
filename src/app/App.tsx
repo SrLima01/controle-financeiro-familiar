@@ -507,6 +507,7 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
  const [accountId,setAccountId]=useState("");
  const [destinationAccountId,setDestinationAccountId]=useState("");
  const [creditCardId,setCreditCardId]=useState("");
+ const [paymentMethod,setPaymentMethod]=useState<"PIX"|"DEBIT"|"CASH"|"TRANSFER"|"OTHER"|"">("");
  const [personId,setPersonId]=useState("");
  const [installments,setInstallments]=useState("2");
  const [parcelado,setParcelado]=useState(false);
@@ -516,6 +517,7 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
  const [filterCategoryId,setFilterCategoryId]=useState("");
  const [filterAccountId,setFilterAccountId]=useState("");
  const [filterStatus,setFilterStatus]=useState<"ALL"|TransactionStatus>("ALL");
+ const [paymentMethodFilter,setPaymentMethodFilter]=useState<"ALL"|"CARD"|"PIX"|"DEBIT"|"CASH"|"TRANSFER"|"OTHER"|"UNSPECIFIED">("ALL");
  const [fromDate,setFromDate]=useState("");
  const [toDate,setToDate]=useState("");
  const [selectedMonth,setSelectedMonth]=useState(()=>todayFinancialDate().slice(0,7));
@@ -534,6 +536,12 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
  const visible=data.transactions.filter(t=>{
    if(summaryFilter==="ALL"&&filter!=="ALL"&&t.type!==filter)return false;
    if(summaryFilter==="ALL"&&filterStatus!=="ALL"&&t.status!==filterStatus)return false;
+   if(summaryFilter==="ALL"&&paymentMethodFilter!=="ALL"){
+     const matchesPayment=paymentMethodFilter==="CARD"?!!t.creditCardId&&t.type==="EXPENSE":
+       paymentMethodFilter==="UNSPECIFIED"?!t.creditCardId&&!t.paymentMethod&&(t.type==="INCOME"||t.type==="EXPENSE"):
+       !t.creditCardId&&t.paymentMethod===paymentMethodFilter;
+     if(!matchesPayment)return false;
+   }
    if(filterCategoryId&&t.categoryId!==filterCategoryId)return false;
    if(filterAccountId){const cardAccount=t.creditCardId?data.cards.find(c=>c.id===t.creditCardId)?.accountId:undefined;if(t.accountId!==filterAccountId&&t.destinationAccountId!==filterAccountId&&cardAccount!==filterAccountId)return false;}
    const movementDate=transactionPeriodDate(t);
@@ -582,11 +590,11 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
    return t.status!=="CANCELLED"&&(t.type==="INCOME"||(t.type==="EXPENSE"&&!t.creditCardId)||t.type==="CARD_PAYMENT");
  });
 
- function reset(){setPendingRecurringEdit(null);setEditing(null);setLaunchMode("unique");setSummaryFilter("ALL");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setDueDate(todayFinancialDate());setPaidDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
+ function reset(){setPendingRecurringEdit(null);setEditing(null);setLaunchMode("unique");setSummaryFilter("ALL");setType("EXPENSE");setStatus("PAID");setDate(todayFinancialDate());setDueDate(todayFinancialDate());setPaidDate(todayFinancialDate());setAmount("");setDescription("");setCategoryId("");setAccountId("");setDestinationAccountId("");setCreditCardId("");setPaymentMethod("");setPersonId("");setInstallments("2");setParcelado(false);setCreatingCategory(false);setError("");setView("new")}
  function edit(t:Transaction){
    try{validateTransactionCanEdit(t)}catch(e){setError(e instanceof Error?e.message:"Este lançamento não pode ser editado.");return;}
    if(t.installmentGroupId){setError("Parcelas vinculadas devem ser gerenciadas pelo grupo. Use os comandos de cancelamento abaixo.");return;}
-   setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setDueDate(t.dueDate??t.scheduledDate??t.date);setPaidDate(t.paidDate??t.date);setSummaryFilter("ALL");setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new");setLaunchMode("unique")
+   setEditing(t);setType(t.type);setStatus(t.status==="CANCELLED" ? (t.type==="INCOME" ? "RECEIVED" : "PAID") : t.status);setDate(t.date);setDueDate(t.dueDate??t.scheduledDate??t.date);setPaidDate(t.paidDate??t.date);setSummaryFilter("ALL");setAmount((t.amountCents/100).toFixed(2).replace(".",","));setDescription(t.description);setCategoryId(t.categoryId??"");setAccountId(t.accountId??"");setDestinationAccountId(t.destinationAccountId??"");setCreditCardId(t.creditCardId??"");setPaymentMethod(t.paymentMethod??"");setPersonId(t.personId??"");setParcelado(false);setError("");setView("new");setLaunchMode("unique")
  }
  async function save(){
    setError("");
@@ -612,7 +620,7 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
        return;
      }
      const transactionDescription=description.trim() || (type==="TRANSFER" ? "Transferência" : "");
-     const tx:Transaction={id:editing?.id??crypto.randomUUID(),date,type,status,amountCents,description:transactionDescription,...((type==="INCOME"||type==="EXPENSE")&&!creditCardId?{dueDate}:{}),...((status==="PAID"||status==="RECEIVED")&&!(type==="EXPENSE"&&creditCardId)?{paidDate:paidDate||date}:{}),...(categoryId?{categoryId}:{}),...(accountId?{accountId}:{}),...(destinationAccountId?{destinationAccountId}:{}),...(creditCardId?{creditCardId}:{}),...(personId?{personId}: {})};
+     const tx:Transaction={id:editing?.id??crypto.randomUUID(),date,type,status,amountCents,description:transactionDescription,...((type==="INCOME"||type==="EXPENSE")&&!creditCardId?{dueDate}:{}),...((type==="INCOME"||type==="EXPENSE")&&!creditCardId&&paymentMethod?{paymentMethod}:{}),...((status==="PAID"||status==="RECEIVED")&&!(type==="EXPENSE"&&creditCardId)?{paidDate:paidDate||date}:{}),...(categoryId?{categoryId}:{}),...(accountId?{accountId}:{}),...(destinationAccountId?{destinationAccountId}:{}),...(creditCardId?{creditCardId}:{}),...(personId?{personId}: {})};
      if(type==="EXPENSE"&&creditCardId){
        const card=data.cards.find(c=>c.id===creditCardId); if(!card) throw new Error("Cartão inválido.");
        const available=calculateCardAvailableLimit(card,data.transactions)+(editing?.creditCardId===card.id&&editing.type==="EXPENSE"?editing.amountCents:0);
@@ -681,9 +689,10 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
        <label>Categoria<select value={filterCategoryId} onChange={e=>setFilterCategoryId(e.target.value)}><option value="">Todas as categorias</option>{data.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
        <label>Conta<select value={filterAccountId} onChange={e=>setFilterAccountId(e.target.value)}><option value="">Todas as contas</option>{data.accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
        <label>Situação<select value={filterStatus} onChange={e=>{setSummaryFilter("ALL");setFilterStatus(e.target.value as "ALL"|TransactionStatus)}}><option value="ALL">Todas as situações</option><option value="PAID">Pago</option><option value="RECEIVED">Recebido</option><option value="PENDING">Pendente</option><option value="PLANNED">Planejado</option><option value="CANCELLED">Cancelado</option></select></label>
+       <label>Pagamento<select value={paymentMethodFilter} onChange={e=>{setSummaryFilter("ALL");setPaymentMethodFilter(e.target.value as typeof paymentMethodFilter)}}><option value="ALL">Todos os pagamentos</option><option value="CARD">Cartão de crédito</option><option value="PIX">Pix</option><option value="DEBIT">Débito</option><option value="CASH">Dinheiro</option><option value="TRANSFER">Transferência</option><option value="OTHER">Outros</option><option value="UNSPECIFIED">Não informado</option></select></label>
        <label>De<input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/></label>
        <label>Até<input type="date" value={toDate} min={fromDate||undefined} onChange={e=>setToDate(e.target.value)}/></label>
-       <button className="secondary compact clear-transaction-filters" onClick={()=>{setSearchText("");setFilterCategoryId("");setFilterAccountId("");setFilterStatus("ALL");setFromDate("");setToDate("");setFilter("ALL");setSummaryFilter("ALL");setSelectedMonth("ALL")}}>Limpar filtros</button>
+       <button className="secondary compact clear-transaction-filters" onClick={()=>{setSearchText("");setFilterCategoryId("");setFilterAccountId("");setFilterStatus("ALL");setPaymentMethodFilter("ALL");setFromDate("");setToDate("");setFilter("ALL");setSummaryFilter("ALL");setSelectedMonth("ALL")}}>Limpar filtros</button>
      </div>
    </section>}
    {view==="cashflow"&&<><div className="cashflow-summary-title"><strong>Resumo do período</strong><span>{selectedMonthLabel}</span></div><section className="cashflow-summary" aria-label="Resumo do fluxo de caixa">{metricOptions.map(metric=><button type="button" key={metric.id} className="cashflow-summary-action" aria-label={`Abrir detalhes: ${metric.label}`} onClick={()=>{setSelectedMetric(metric.id);setSummaryFilter("ALL");setView("metric");}}><span>{metric.label}</span><strong className={metric.className}>{metric.valueText}</strong></button>)}</section></>}
@@ -720,6 +729,7 @@ function Transactions({data,onChange,initialView="cashflow"}:{data:EntityCollect
      <label>{type==="TRANSFER"?"Conta de origem":type==="CARD_PAYMENT"?"Conta de pagamento":"Conta"}<select value={accountId} onChange={e=>{setAccountId(e.target.value);if(e.target.value&&type!=="CARD_PAYMENT")setCreditCardId("")}} disabled={type==="CARD_PAYMENT"&&!!creditCardId}><option value="">Selecione</option>{(type==="CARD_PAYMENT"&&creditCardId?data.accounts.filter(a=>a.id===data.cards.find(c=>c.id===creditCardId)?.accountId ):transactionAccountOptions).map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label>
      {type==="TRANSFER"&&<label>Conta de destino<select value={destinationAccountId} onChange={e=>setDestinationAccountId(e.target.value)}><option value="">Selecione</option>{transactionAccountOptions.map(a=><option key={a.id} value={a.id}>{a.name}{a.active?"":" (arquivada)"}</option>)}</select></label>}
      {type==="EXPENSE"&&<label>Cartão de crédito (opcional)<select value={creditCardId} onChange={e=>{setCreditCardId(e.target.value);if(e.target.value)setAccountId("")}}><option value="">Nenhum / conta</option>{transactionCardOptions.map(c=><option key={c.id} value={c.id}>{c.name}{c.active?"":" (arquivado)"}</option>)}</select></label>}
+     {(type==="INCOME"||type==="EXPENSE")&&!creditCardId&&<label>Tipo de pagamento<select value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value as typeof paymentMethod)}><option value="">Não informado</option><option value="PIX">Pix</option><option value="DEBIT">Débito</option><option value="CASH">Dinheiro</option><option value="TRANSFER">Transferência</option><option value="OTHER">Outro</option></select></label>}
      {type==="CARD_PAYMENT"&&<label>Cartão<select value={creditCardId} onChange={e=>{const id=e.target.value;setCreditCardId(id);const card=data.cards.find(c=>c.id===id);setAccountId(card?.accountId??"")}}><option value="">Selecione</option>{paymentCardOptions.map(c=><option key={c.id} value={c.id}>{c.name}{c.active?"":" (arquivado)"}</option>)}</select></label>}
      {type!=="TRANSFER"&&<label>Pessoa (opcional)<select value={personId} onChange={e=>setPersonId(e.target.value)}><option value="">Nenhuma</option>{transactionPeopleOptions.map(p=><option key={p.id} value={p.id}>{p.name}{p.active?"":" (arquivada)"}</option>)}</select></label>}
      {type==="EXPENSE"&&<label className="checkbox-field"><input type="checkbox" checked={parcelado} onChange={e=>setParcelado(e.target.checked)} disabled={!!editing}/> Parcelar esta saída</label>}
@@ -1189,7 +1199,7 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
      const forecast=isFutureRecurringCardForecast(tx,today);
      const effectiveDate=forecast?(tx.scheduledDate??tx.date):tx.date;
      const closing=invoiceClosingDate(effectiveDate,c.closingDay);
-     if(closing<currentClosing)continue;
+     // Não descarta faturas anteriores: uma fatura vencida ainda pode ter saldo em aberto.
      const due=invoiceDueDateFromClosing(closing,c.closingDay,c.dueDay);
      const row=rows.get(closing)??{closingDate:closing,dueDate:due,amountCents:0,transactions:[],forecasts:[]};
      if(forecast) row.forecasts.push(tx);
@@ -1201,8 +1211,8 @@ function Cards({data,onChange}:{data:EntityCollection;onChange:(next:EntityColle
      row.transactions.sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
    }
    const sorted=[...rows.values()].sort((a,b)=>a.closingDate.localeCompare(b.closingDate));
-   const currentIndex=sorted.findIndex(row=>row.closingDate===currentClosing);
-   const result=sorted.slice(Math.max(0,currentIndex));
+   // Faturas passadas quitadas ficam ocultas; faturas com saldo em aberto permanecem consultáveis.
+   const result=sorted.filter(row=>row.closingDate>=currentClosing||row.amountCents>0||row.forecasts.length>0);
    const known=new Set(result.map(row=>row.closingDate));
    const current=new Date(currentClosing+"T12:00:00");
    for(let i=0;result.length<12;i++){
